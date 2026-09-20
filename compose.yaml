@@ -1,0 +1,77 @@
+name: tram-ridership-prediction
+
+x-backend: &backend
+  image: tram-ridership-backend:local
+  build:
+    context: .
+    args:
+      PYTHON_IMAGE: ${TRAM_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+      NODE_IMAGE: ${TRAM_NODE_IMAGE:-node:22.23.2-alpine}
+  env_file: .env
+  environment:
+    TRAM_DATABASE_URL: postgresql+psycopg://tram:${TRAM_POSTGRES_PASSWORD:?Run init-config first}@db:5432/tram
+
+services:
+  db:
+    image: ${TRAM_POSTGRES_IMAGE:-postgres:17.11-bookworm}
+    environment:
+      POSTGRES_USER: tram
+      POSTGRES_PASSWORD: ${TRAM_POSTGRES_PASSWORD:?Run init-config first}
+      POSTGRES_DB: tram
+    ports:
+      - "127.0.0.1:${TRAM_POSTGRES_PORT:-15433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tram -d tram"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "tram.cli", "migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "tram.cli", "worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  test-db:
+    profiles: ["test"]
+    image: ${TRAM_POSTGRES_IMAGE:-postgres:17.11-bookworm}
+    environment:
+      POSTGRES_USER: tram
+      POSTGRES_PASSWORD: tram-test-only
+      POSTGRES_DB: tram_test
+    ports:
+      - "127.0.0.1:15434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tram -d tram_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

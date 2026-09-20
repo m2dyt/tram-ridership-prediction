@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tram-ridership-prediction"
+version = "0.1.0"
+description = "Versioned tram ridership API and leakage-safe forecasting foundations"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "jsonschema>=4.23,<5",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.7,<3",
+  "pyyaml>=6,<7",
+  "sqlalchemy>=2.0,<3",
+  "tzdata>=2025.1",
+  "uvicorn>=0.30,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "pytest-cov>=6,<8", "ruff>=0.11,<1"]
+
+[project.scripts]
+tram = "tram.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/tram", "ml/src/tram_ml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["postgres: requires TRAM_TEST_DATABASE_URL pointing to an isolated test database"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["tram", "tram_ml"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
