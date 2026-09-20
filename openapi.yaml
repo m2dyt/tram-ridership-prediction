@@ -1,0 +1,3389 @@
+# Предварительный контракт; примеры синтетические. См. IMPLEMENTATION_PLAN.md.
+openapi: 3.1.0
+info:
+  title: Tram Ridership Prediction API
+  version: 0.1.0
+  description: >
+    Предварительный контракт по SPECIFICATION (2).md и IMPLEMENTATION_PLAN.md.
+
+    Сервер ещё не реализован. Все примеры синтетические; реальные идентификаторы и качество модели не
+    утверждаются.
+
+
+    P0: справочники, история, прогнозы дня/месяца/года, карта, свежесть и проверка на истории.
+
+    P1: prediction_interval допускается, но может быть null; предупреждения и калькулятор потребуют дополнения
+    контракта.
+
+
+    Время: RFC 3339 с обязательным смещением; календарные границы Europe/Moscow, интервалы [start,end).
+
+    Все from/to — полные границы шага; start < end. Любой запрос истории/точек ограничен 366 календарными
+    днями.
+
+    День/месяц/год — календарный период от forecast_start; отсутствующее число после прибавления месяца/года
+    ограничивается последним числом целевого месяца.
+
+    Год с месячным шагом начинается первого числа. Поддерживаемые сочетания возвращает capabilities, они не
+    декартово произведение перечислений.
+
+
+    validations — оплаты; boardings — посадки; occupancy — средняя наполненность одного вагона на участке,
+    взвешенная по времени; occupancy_ratio — такое же среднее отношений к вместимости.
+
+    validations и boardings суммируются; occupancy и occupancy_ratio никогда не суммируются. Для наполненности
+    нужен уровень segment.
+
+    Соответствие единиц: validations→validations, boardings/occupancy→passengers, occupancy_ratio→ratio. ratio
+    может быть >1.
+
+    Направление доступно только при наличии в источнике. Источник и происхождение значения — разные признаки.
+
+
+    Клиент закрепляет dataset_revision_id/network_revision_id и run_id между картой и графиком. GET не
+    запускает ML.
+
+    Неизвестные query-параметры запрещены (422). Для массивов JSON порядок route_ids учитывается при проверке
+    идемпотентности; порядок ключей объекта не учитывается.
+
+    GET требует viewer или operator, POST — operator; роль определяется конфигурацией Bearer-токена.
+
+    Зависимости между полями, принадлежность IDs, порядок дат и числовые границы диапазона проверяются
+    приложением дополнительно к JSON Schema.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Планируемый локальный backend
+  - url: /api/v1
+    description: API на том же origin, если UI опубликован рядом с backend
+tags:
+  - name: System
+    description: Готовность, возможности и свежесть
+  - name: Catalogs
+    description: Версионированная маршрутная сеть
+  - name: Observations
+    description: Фактические и восстановленные значения
+  - name: Forecasts
+    description: Асинхронные расчёты и неизменяемые результаты
+  - name: Evaluations
+    description: Временная проверка качества и сравнение с базами
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      operationId: getHealth
+      summary: Готовность API и БД
+      description: Публичная проверка готовности без секретов. При недоступности БД возвращает 503 со схемой Health,
+        не Error.
+      parameters: []
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              example:
+                status: ready
+                checked_at: 2026-09-20T18:02:00+03:00
+                api_version: v1
+                database: up
+        "503":
+          description: API не готов обслуживать запросы.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+      security: []
+  /capabilities:
+    get:
+      tags:
+        - System
+      operationId: getCapabilities
+      summary: Доступные показатели и профили
+      description: Профили вычисляются из аудита данных и реестра моделей. Для каждого обязательного горизонта
+        вернуть профиль с availability, даже если расчёт пока недоступен. Нет опубликованной версии — 503;
+        указана неизвестная — 404. Клиент строит фильтры по этому ответу.
+      parameters:
+        - $ref: "#/components/parameters/DatasetRevisionOptional"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+              examples:
+                demo:
+                  $ref: "#/components/examples/Capabilities"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /data-status:
+    get:
+      tags:
+        - System
+      operationId: getDataStatus
+      summary: Свежесть и режим источника
+      description: Опрос по recommended_poll_seconds. Смена dataset_revision_id означает новую опубликованную
+        версию; существующие run и курсоры сохраняют свою. replay/demo отображаются явно. Пустое хранилище —
+        200 с null версиями.
+      parameters: []
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataStatus"
+              examples:
+                demo:
+                  $ref: "#/components/examples/DataStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /routes:
+    get:
+      tags:
+        - Catalogs
+      operationId: listRoutes
+      summary: Маршруты на дату
+      description: Сортировка по route.id; только маршруты, действующие на valid_at. Пустая выборка — 200. Курсор
+        закрепляет версию и дату.
+      parameters:
+        - $ref: "#/components/parameters/NetworkRevision"
+        - $ref: "#/components/parameters/ValidAt"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /routes/{route_id}:
+    get:
+      tags:
+        - Catalogs
+      operationId: getRoute
+      summary: Схема маршрута, направления и остановки
+      description: Полная топология одного маршрута в указанной версии сети на дату. Нельзя использовать текущую
+        геометрию для исторической точки другой версии без явного сопоставления. Маршрут не действует на дату
+        — 404.
+      parameters:
+        - $ref: "#/components/parameters/RoutePath"
+        - $ref: "#/components/parameters/NetworkRevision"
+        - $ref: "#/components/parameters/ValidAt"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /stops:
+    get:
+      tags:
+        - Catalogs
+      operationId: listStops
+      summary: Справочник остановок
+      description: Уникальные остановки, действующие на valid_at; сортировка по stop.id. Позиции повторных остановок
+        находятся в RouteDetail. direction_id требует route_id. Неверная принадлежность — 422; неизвестный ID
+        — 404.
+      parameters:
+        - $ref: "#/components/parameters/NetworkRevision"
+        - $ref: "#/components/parameters/ValidAt"
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/DirectionId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StopPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /observations:
+    get:
+      tags:
+        - Observations
+      operationId: getObservations
+      summary: История наблюдений
+      description: "Читает сохранённый ряд выбранного профиля. Границы from/to соответствуют его шагу; выбранные
+        точки целиком входят в [from,to). Отсутствующие значения внутри известного периода ряда выдаются как
+        null с причиной; период вне покрытия возвращает пустой список. Нули не подставляются. Все
+        пространственные фильтры соединяются AND; неизвестный ID — 404, неверная принадлежность или сочетание
+        — 422. Нельзя фильтровать остановку в агрегате уровня route. Валидная пустая выборка — 200 с items=[];
+        неизвестные query-параметры — 422. Сортировка точек: interval_start, route_id, direction_id (null
+        первым), stop_sequence, stop_id, segment_id. Курсор привязан к версии и фильтрам; проход страниц не
+        смешивает версии."
+      parameters:
+        - $ref: "#/components/parameters/DatasetRevision"
+        - $ref: "#/components/parameters/ObservationProfileId"
+        - name: from
+          in: query
+          required: true
+          description: Начало включается; локальная граница шага профиля. Вместе с to выбирает полные интервалы, не
+            обрезает и не агрегирует.
+          schema:
+            type: string
+            format: date-time
+          example: 2026-09-19T08:00:00+03:00
+        - name: to
+          in: query
+          required: true
+          description: Конец исключается; from < to, граница шага профиля. Не более 366 календарных дней на запрос;
+            большие периоды разбиваются.
+          schema:
+            type: string
+            format: date-time
+          example: 2026-09-19T09:00:00+03:00
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/DirectionId"
+        - $ref: "#/components/parameters/StopId"
+        - $ref: "#/components/parameters/StopSequence"
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationPage"
+              examples:
+                demo:
+                  $ref: "#/components/examples/Observations"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /forecast-runs:
+    post:
+      tags:
+        - Forecasts
+      operationId: createForecastRun
+      summary: Создать задание прогноза
+      description: Требуется роль operator. В одной транзакции проверяет профиль, маршруты, временные границы и
+        готовую модель, закрепляет версии и ставит задание в очередь. Обучение не запускает. До публикации
+        результат не читается. Первый запрос — 202; повтор с тем же ключом/телом — 200 и текущее состояние
+        того же run (в том числе failed); другой payload — 409. Ключ хранится минимум 24 часа. Повтор после
+        failed с новым ключом создаёт новое задание. Исторический as_of допускается только при наличии
+        воспроизводимого набора признаков и модели, обученной без будущих данных.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Повтор ранее принятого запроса; возвращается тот же запуск.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+            Location:
+              schema:
+                type: string
+              description: URI существующего запуска.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+              examples:
+                demo:
+                  $ref: "#/components/examples/CompletedRun"
+        "202":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+            Location:
+              schema:
+                type: string
+              description: Относительный URI /api/v1/forecast-runs/{run_id}.
+            Retry-After:
+              description: Рекомендуемая задержка в секундах перед следующим опросом/повтором.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+              examples:
+                demo:
+                  $ref: "#/components/examples/QueuedRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateForecastRun"
+            examples:
+              demo:
+                $ref: "#/components/examples/CreateForecast"
+              month:
+                $ref: "#/components/examples/CreateForecastMonth"
+              year:
+                $ref: "#/components/examples/CreateForecastYear"
+    get:
+      tags:
+        - Forecasts
+      operationId: listForecastRuns
+      summary: Найти сохранённые запуски
+      description: "dataset_revision_id здесь является необязательным фильтром: без него поиск по всем доступным
+        версиям, без подстановки latest. Сортировка created_at DESC, id DESC. route_id означает, что маршрут
+        входит в область запуска. Для последнего успешного прогноза указать версию, profile_id,
+        forecast_start, status=succeeded и limit=1. Первая страница фиксирует верхнюю границу created_at в
+        курсоре; новые задания не вставляются между уже читаемыми страницами. Фильтры статуса проверяются по
+        снимку первой страницы; в items возвращается текущее состояние найденных запусков."
+      parameters:
+        - $ref: "#/components/parameters/DatasetRevisionOptional"
+        - $ref: "#/components/parameters/ProfileId"
+        - $ref: "#/components/parameters/Horizon"
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/RunStatus"
+        - $ref: "#/components/parameters/ForecastStart"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRunPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /forecast-runs/{run_id}:
+    get:
+      tags:
+        - Forecasts
+      operationId: getForecastRun
+      summary: Статус и параметры запуска
+      description: "queued/running: повторить запрос по Retry-After. failed: failure содержит безопасное описание.
+        succeeded: читать points/map. Модель, профиль, версии, as_of и период не меняются после создания."
+      parameters:
+        - $ref: "#/components/parameters/RunPath"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+            Retry-After:
+              description: Рекомендуемая задержка в секундах перед следующим опросом/повтором.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+              examples:
+                demo:
+                  $ref: "#/components/examples/CompletedRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /forecast-runs/{run_id}/points:
+    get:
+      tags:
+        - Forecasts
+      operationId: getForecastPoints
+      summary: Прогноз для графика
+      description: "Только succeeded; иначе 409 RESULT_NOT_READY или RUN_FAILED. from/to находятся внутри
+        [forecast_start,forecast_end] и на сетке профиля. Читает уже рассчитанные точки. Пустая выборка
+        поддерживаемых фильтров — 200. Все пространственные фильтры соединяются AND; неизвестный ID — 404,
+        неверная принадлежность или сочетание — 422. Нельзя фильтровать остановку в агрегате уровня route.
+        Валидная пустая выборка — 200 с items=[]; неизвестные query-параметры — 422. Сортировка точек:
+        interval_start, route_id, direction_id (null первым), stop_sequence, stop_id, segment_id. Курсор
+        привязан к версии и фильтрам; проход страниц не смешивает версии."
+      parameters:
+        - $ref: "#/components/parameters/RunPath"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/DirectionId"
+        - $ref: "#/components/parameters/StopId"
+        - $ref: "#/components/parameters/StopSequence"
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastPointPage"
+              examples:
+                demo:
+                  $ref: "#/components/examples/ForecastPoints"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /forecast-runs/{run_id}/map:
+    get:
+      tags:
+        - Forecasts
+      operationId: getForecastMap
+      summary: Прогноз одного интервала на карте
+      description: "GeoJSON для одного точного interval_start. interval_end определяется шагом профиля; нельзя
+        запрашивать произвольную агрегацию. Те же run и фильтры дают те же значения, что /points. Недостающая
+        геометрия сохраняется как null с флагом missing_geometry. Неподдерживаемый пространственный фильтр —
+        422; неготовый/ошибочный run — 409. Пустая выборка — FeatureCollection с features=[]. Все
+        пространственные фильтры соединяются AND; неизвестный ID — 404, неверная принадлежность или сочетание
+        — 422. Нельзя фильтровать остановку в агрегате уровня route. Валидная пустая выборка — 200 с
+        features=[]; неизвестные query-параметры — 422. Сортировка точек: interval_start, route_id,
+        direction_id (null первым), stop_sequence, stop_id, segment_id. Курсор привязан к версии и фильтрам;
+        проход страниц не смешивает версии."
+      parameters:
+        - $ref: "#/components/parameters/RunPath"
+        - $ref: "#/components/parameters/IntervalStart"
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/DirectionId"
+        - $ref: "#/components/parameters/StopId"
+        - $ref: "#/components/parameters/StopSequence"
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/geo+json:
+              schema:
+                $ref: "#/components/schemas/ForecastMap"
+              examples:
+                demo:
+                  $ref: "#/components/examples/ForecastMap"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /evaluations:
+    get:
+      tags:
+        - Evaluations
+      operationId: listEvaluations
+      summary: Отчёты проверки на истории
+      description: Отчёты публикуются offline-конвейером. dataset_revision_id — фильтр; без него поиск по всем
+        версиям. created_at DESC, id DESC; снимок списка фиксируется курсором. Каждый отчёт относится к одному
+        профилю/горизонту. Нет отчётов — 200 с пустым списком; это не подтверждённое качество.
+      parameters:
+        - $ref: "#/components/parameters/DatasetRevisionOptional"
+        - $ref: "#/components/parameters/ProfileId"
+        - $ref: "#/components/parameters/Horizon"
+        - $ref: "#/components/parameters/ModelId"
+        - $ref: "#/components/parameters/EvaluationStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /evaluations/{evaluation_id}:
+    get:
+      tags:
+        - Evaluations
+      operationId: getEvaluation
+      summary: Метрики, базовые методы и ограничения
+      description: Указывает fold, доступность признаков и правило пиков. Модель и базовые методы имеют общую
+        выборку сравнения. insufficient_history/unavailable возвращаются с 200, пустыми folds/scores при
+        отсутствии проверки и объяснением в limitations. Регрессия — собственный базовый метод, если иное не
+        подтверждено; не модель ЕДЦ.
+      parameters:
+        - $ref: "#/components/parameters/EvaluationPath"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /evaluations/{evaluation_id}/points:
+    get:
+      tags:
+        - Evaluations
+      operationId: getEvaluationPoints
+      summary: Факт и прогнозы для исторического графика
+      description: "Только сохранённые точки тестовых периодов, без переобучения. from/to на сетке профиля; вне
+        тестового покрытия — пустой список. Несколько folds могут содержать одну календарную точку: отображать
+        их раздельно по fold_id. Для отчёта без проверки — 200 с items=[], причина в summary.limitations.
+        Сортировка fold_id, затем interval_start и пространственный ключ. Все пространственные фильтры
+        соединяются AND; неизвестный ID — 404, неверная принадлежность или сочетание — 422. Нельзя фильтровать
+        остановку в агрегате уровня route. Валидная пустая выборка — 200 с items=[]; неизвестные
+        query-параметры — 422."
+      parameters:
+        - $ref: "#/components/parameters/EvaluationPath"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/FoldId"
+        - $ref: "#/components/parameters/DemandSlice"
+        - $ref: "#/components/parameters/RouteId"
+        - $ref: "#/components/parameters/DirectionId"
+        - $ref: "#/components/parameters/StopId"
+        - $ref: "#/components/parameters/StopSequence"
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationPointPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Токен закрытого стенда из конфигурации. Роли viewer/operator; выдача токенов не входит в этот
+        контракт. Не предполагает JWT.
+  parameters:
+    DatasetRevision:
+      name: dataset_revision_id
+      in: query
+      required: true
+      description: Неизменяемая версия данных из /data-status.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: demo-data-v1
+    DatasetRevisionOptional:
+      name: dataset_revision_id
+      in: query
+      required: false
+      description: Необязательная версия данных. В capabilities без неё выбирается текущая опубликованная версия; в
+        списках запусков/отчётов отсутствие означает поиск по всем версиям. Для воспроизводимости передавайте
+        явно.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    NetworkRevision:
+      name: network_revision_id
+      in: query
+      required: true
+      description: Версия маршрутной сети из capabilities или run.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: demo-network-v1
+    ValidAt:
+      name: valid_at
+      in: query
+      required: true
+      description: Дата действия справочника в Europe/Moscow.
+      schema:
+        type: string
+        format: date
+      example: 2026-09-21
+    RouteId:
+      name: route_id
+      in: query
+      required: false
+      description: Фильтр маршрута. Не номер маршрута.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: demo-route-01
+    DirectionId:
+      name: direction_id
+      in: query
+      required: false
+      description: Требует route_id. Направление должно существовать в версии сети и поддерживаться пространственным
+        уровнем.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    StopId:
+      name: stop_id
+      in: query
+      required: false
+      description: Требует route_id и профиль уровня stop. Без stop_sequence возвращает все вхождения этой остановки
+        в выбранном направлении/маршруте.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    StopSequence:
+      name: stop_sequence
+      in: query
+      required: false
+      description: Требует stop_id. Для точного выбора в нескольких направлениях дополнительно задайте direction_id.
+      schema:
+        type: integer
+        minimum: 1
+    SegmentId:
+      name: segment_id
+      in: query
+      required: false
+      description: Требует route_id и уровень segment. Несовместим с stop_id и stop_sequence.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    From:
+      name: from
+      in: query
+      required: true
+      description: Начало включается; локальная граница шага профиля. Вместе с to выбирает полные интервалы, не
+        обрезает и не агрегирует.
+      schema:
+        type: string
+        format: date-time
+      example: 2026-09-21T08:00:00+03:00
+    To:
+      name: to
+      in: query
+      required: true
+      description: Конец исключается; from < to, граница шага профиля. Не более 366 календарных дней на запрос;
+        большие периоды разбиваются.
+      schema:
+        type: string
+        format: date-time
+      example: 2026-09-21T09:00:00+03:00
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Максимум элементов страницы.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 200
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Курсор предыдущей страницы. Версия, фильтры и limit должны совпадать; иначе 400 INVALID_CURSOR.
+      schema:
+        type: string
+        maxLength: 4096
+    ProfileId:
+      name: profile_id
+      in: query
+      required: false
+      description: ID профиля прогноза; вместе с версией данных однозначно задаёт показатель, горизонт и шаг.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    ObservationProfileId:
+      name: observation_profile_id
+      in: query
+      required: true
+      description: ID профиля истории из capabilities.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: demo-validations-stop-hour
+    RunStatus:
+      name: status
+      in: query
+      required: false
+      description: Фильтр статуса; succeeded для поиска опубликованных результатов.
+      schema:
+        $ref: "#/components/schemas/RunStatus"
+    Horizon:
+      name: horizon
+      in: query
+      required: false
+      description: Фильтр горизонта.
+      schema:
+        $ref: "#/components/schemas/Horizon"
+    ForecastStart:
+      name: forecast_start
+      in: query
+      required: false
+      description: Точное начало прогнозного периода. Вместе с dataset_revision_id/profile_id/status=succeeded
+        позволяет найти нужный запуск.
+      schema:
+        type: string
+        format: date-time
+    ModelId:
+      name: model_id
+      in: query
+      required: false
+      description: Фильтр по модели.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    EvaluationStatus:
+      name: status
+      in: query
+      required: false
+      description: Статус проверки качества.
+      schema:
+        type: string
+        enum:
+          - complete
+          - insufficient_history
+          - unavailable
+    DemandSlice:
+      name: demand_slice
+      in: query
+      required: false
+      description: По умолчанию all; peak использует правило, зафиксированное в отчёте до оценки.
+      schema:
+        type: string
+        enum:
+          - all
+          - peak
+      example: all
+    FoldId:
+      name: fold_id
+      in: query
+      required: false
+      description: Фильтр fold; при пересечении тестовых периодов точки разных folds остаются отдельными.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    IntervalStart:
+      name: interval_start
+      in: query
+      required: true
+      description: Точное начало одного сохранённого интервала; обязательно внутри периода run и на его сетке.
+      schema:
+        type: string
+        format: date-time
+      example: 2026-09-21T08:00:00+03:00
+    RoutePath:
+      name: route_id
+      in: path
+      required: true
+      description: ID маршрута в выбранной версии сети.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: demo-route-01
+    RunPath:
+      name: run_id
+      in: path
+      required: true
+      description: UUID запуска.
+      schema:
+        type: string
+        format: uuid
+      example: 11111111-1111-4111-8111-111111111111
+    EvaluationPath:
+      name: evaluation_id
+      in: path
+      required: true
+      description: UUID отчёта.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Обязательный ключ повтора. Область — пользователь и операция; срок хранения минимум 24 часа. То
+        же JSON-тело независимо от порядка ключей возвращает тот же run; иное тело — 409.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._:-]+$
+      example: demo-forecast-20260921-01
+  responses:
+    BadRequest:
+      description: Некорректный синтаксис запроса или курсор (INVALID_CURSOR).
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: BAD_REQUEST
+            message: Некорректный синтаксис запроса или курсор (INVALID_CURSOR).
+            request_id: demo-request-01
+            details: []
+    Unauthorized:
+      description: Токен отсутствует или недействителен.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: UNAUTHORIZED
+            message: Токен отсутствует или недействителен.
+            request_id: demo-request-01
+            details: []
+    Forbidden:
+      description: Недостаточно прав; создание прогноза требует operator.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: FORBIDDEN
+            message: Недостаточно прав; создание прогноза требует operator.
+            request_id: demo-request-01
+            details: []
+    NotFound:
+      description: Версия, ресурс, профиль или запрошенный маршрут не найдены.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: NOT_FOUND
+            message: Версия, ресурс, профиль или запрошенный маршрут не найдены.
+            request_id: demo-request-01
+            details: []
+    Conflict:
+      description: Результат ещё не готов, запуск завершился ошибкой (RUN_FAILED), либо ключ повторён с другим телом
+        (IDEMPOTENCY_CONFLICT).
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: RESULT_NOT_READY
+            message: Результат ещё не готов, запуск завершился ошибкой (RUN_FAILED), либо ключ повторён с другим телом
+              (IDEMPOTENCY_CONFLICT).
+            request_id: demo-request-01
+            details: []
+    ValidationError:
+      description: "Некорректные поля/сочетания фильтров, неподдерживаемый профиль, недостаточная история или нет
+        подходящей модели. codes: VALIDATION_ERROR, UNSUPPORTED_PROFILE, INSUFFICIENT_HISTORY,
+        MODEL_UNAVAILABLE."
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: VALIDATION_ERROR
+            message: "Некорректные поля/сочетания фильтров, неподдерживаемый профиль, недостаточная история или нет
+              подходящей модели. codes: VALIDATION_ERROR, UNSUPPORTED_PROFILE, INSUFFICIENT_HISTORY,
+              MODEL_UNAVAILABLE."
+            request_id: demo-request-01
+            details: []
+    RateLimited:
+      description: Превышена частота запросов или лимит заданий.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+        Retry-After:
+          description: Рекомендуемая задержка в секундах перед следующим опросом/повтором.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: RATE_LIMITED
+            message: Превышена частота запросов или лимит заданий.
+            request_id: demo-request-01
+            details: []
+    Unavailable:
+      description: Временная недоступность БД, очереди или опубликованных данных.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+        Retry-After:
+          description: Рекомендуемая задержка в секундах перед следующим опросом/повтором.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: SERVICE_UNAVAILABLE
+            message: Временная недоступность БД, очереди или опубликованных данных.
+            request_id: demo-request-01
+            details: []
+    InternalError:
+      description: Непредвиденная ошибка. Подробности только в серверном журнале.
+      headers:
+        X-Request-ID:
+          description: ID запроса для поиска в журнале.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: INTERNAL_ERROR
+            message: Непредвиденная ошибка. Подробности только в серверном журнале.
+            request_id: demo-request-01
+            details: []
+  schemas:
+    Metric:
+      type: string
+      enum:
+        - validations
+        - boardings
+        - occupancy
+        - occupancy_ratio
+      description: Число оплат; посадки; средняя наполненность одного вагона на участке; средняя доля заполнения.
+        Доступность определяется профилем.
+    Unit:
+      type: string
+      enum:
+        - validations
+        - passengers
+        - ratio
+      description: Для ratio 1.0 означает 100%. WAPE также передаётся долей, но не является целевым показателем.
+    Horizon:
+      type: string
+      enum:
+        - day
+        - month
+        - year
+    Resolution:
+      type: string
+      enum:
+        - hour
+        - day
+        - month
+    SpatialLevel:
+      type: string
+      enum:
+        - route
+        - route_direction
+        - stop
+        - segment
+    SourceMode:
+      type: string
+      enum:
+        - live
+        - batch
+        - replay
+        - demo
+      description: Режим источника. Все примеры в этом документе синтетические, source_mode=demo.
+    RunStatus:
+      type: string
+      enum:
+        - queued
+        - running
+        - succeeded
+        - failed
+    Quality:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - coverage_ratio
+        - flags
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - partial
+            - missing
+            - unverified
+        coverage_ratio:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: "null"
+          description: Доля покрытия по методике аудита; null, если определить нельзя.
+        flags:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+      description: Качество источника/расчёта; не заменяет метрики точности модели.
+    Page:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+      properties:
+        next_cursor:
+          anyOf:
+            - type: string
+            - type: "null"
+        has_more:
+          type: boolean
+      description: has_more=true тогда и только тогда, когда next_cursor не null. Курсор непрозрачен и привязан к
+        фильтрам и версии.
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - reason
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+      description: field — путь поля или имя query-параметра.
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - request_id
+        - details
+      properties:
+        code:
+          type: string
+          enum:
+            - BAD_REQUEST
+            - INVALID_CURSOR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - VALIDATION_ERROR
+            - UNSUPPORTED_PROFILE
+            - INSUFFICIENT_HISTORY
+            - MODEL_UNAVAILABLE
+            - RESULT_NOT_READY
+            - RUN_FAILED
+            - IDEMPOTENCY_CONFLICT
+            - RATE_LIMITED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+    SpatialKey:
+      type: object
+      additionalProperties: false
+      required:
+        - level
+        - route_id
+        - direction_id
+        - stop_id
+        - stop_sequence
+        - segment_id
+      properties:
+        level:
+          $ref: "#/components/schemas/SpatialLevel"
+        route_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        direction_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+        stop_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+        stop_sequence:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+        segment_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+      description: "Ключ внутри network_revision_id. route: только route_id; route_direction: также direction_id;
+        stop: stop_id и stop_sequence, direction_id при наличии; segment: segment_id, direction_id при
+        наличии. Лишние измерения равны null."
+      allOf:
+        - if:
+            properties:
+              level:
+                const: route
+          then:
+            properties:
+              direction_id:
+                type: "null"
+              stop_id:
+                type: "null"
+              stop_sequence:
+                type: "null"
+              segment_id:
+                type: "null"
+        - if:
+            properties:
+              level:
+                const: route_direction
+          then:
+            properties:
+              direction_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+              stop_id:
+                type: "null"
+              stop_sequence:
+                type: "null"
+              segment_id:
+                type: "null"
+        - if:
+            properties:
+              level:
+                const: stop
+          then:
+            properties:
+              stop_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+              stop_sequence:
+                type: integer
+                minimum: 1
+              segment_id:
+                type: "null"
+        - if:
+            properties:
+              level:
+                const: segment
+          then:
+            properties:
+              segment_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+              stop_id:
+                type: "null"
+              stop_sequence:
+                type: "null"
+    Position:
+      type: array
+      prefixItems:
+        - type: number
+          minimum: -180
+          maximum: 180
+        - type: number
+          minimum: -90
+          maximum: 90
+      items: false
+      minItems: 2
+      maxItems: 2
+      description: "WGS84: [долгота, широта]."
+    PointGeometry:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          const: Point
+          type: string
+        coordinates:
+          $ref: "#/components/schemas/Position"
+    LineGeometry:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          const: LineString
+          type: string
+        coordinates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Position"
+          minItems: 2
+    MultiLineGeometry:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          const: MultiLineString
+          type: string
+        coordinates:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/Position"
+            minItems: 2
+          minItems: 1
+    Geometry:
+      oneOf:
+        - $ref: "#/components/schemas/PointGeometry"
+        - $ref: "#/components/schemas/LineGeometry"
+        - $ref: "#/components/schemas/MultiLineGeometry"
+    Health:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - checked_at
+        - api_version
+        - database
+      properties:
+        status:
+          type: string
+          enum:
+            - ready
+            - unavailable
+        checked_at:
+          type: string
+          format: date-time
+        api_version:
+          type: string
+        database:
+          type: string
+          enum:
+            - up
+            - down
+    SourceStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - source
+        - source_mode
+        - event_watermark
+        - ingested_at
+        - freshness
+        - stale_after_seconds
+        - quality
+      properties:
+        source:
+          type: string
+          enum:
+            - validations
+            - telemetry
+            - network
+            - capacity
+            - external
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        event_watermark:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Время последнего события источника; это не гарантия полноты всех предыдущих интервалов.
+        ingested_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Когда данные получены системой.
+        freshness:
+          type: string
+          enum:
+            - fresh
+            - stale
+            - unknown
+        stale_after_seconds:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+        quality:
+          $ref: "#/components/schemas/Quality"
+    DataStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - checked_at
+        - dataset_revision_id
+        - network_revision_id
+        - source_mode
+        - sources
+        - recommended_poll_seconds
+        - warnings
+      properties:
+        checked_at:
+          type: string
+          format: date-time
+        dataset_revision_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+        network_revision_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceStatus"
+        recommended_poll_seconds:
+          type: integer
+          minimum: 5
+        warnings:
+          type: array
+          items:
+            type: string
+      description: Если опубликованных данных нет, версии равны null. source_mode относится к целевым данным;
+        источники могут иметь собственные режимы.
+    ObservationProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - metric
+        - unit
+        - spatial_level
+        - resolution
+        - route_ids
+        - history_start
+        - history_end
+        - aggregation_method
+        - limitations
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        metric:
+          $ref: "#/components/schemas/Metric"
+        unit:
+          $ref: "#/components/schemas/Unit"
+        spatial_level:
+          $ref: "#/components/schemas/SpatialLevel"
+        resolution:
+          $ref: "#/components/schemas/Resolution"
+        route_ids:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+          minItems: 1
+          uniqueItems: true
+        history_start:
+          type: string
+          format: date-time
+        history_end:
+          type: string
+          format: date-time
+        aggregation_method:
+          type: string
+        limitations:
+          type: array
+          items:
+            type: string
+      description: Доступное сочетание показателя, пространственного уровня и шага истории. history_end исключается.
+        Покрытие отдельных рядов может быть неполным.
+    ForecastProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - observation_profile_id
+        - metric
+        - unit
+        - spatial_level
+        - horizon
+        - resolution
+        - route_ids
+        - aggregation_method
+        - availability
+        - unavailable_reason
+        - allowed_as_of_start
+        - allowed_as_of_end
+        - forecast_start_min
+        - forecast_start_max
+        - start_alignment
+        - evaluation_status
+        - prediction_interval_available
+        - limitations
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        observation_profile_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        metric:
+          $ref: "#/components/schemas/Metric"
+        unit:
+          $ref: "#/components/schemas/Unit"
+        spatial_level:
+          $ref: "#/components/schemas/SpatialLevel"
+        horizon:
+          $ref: "#/components/schemas/Horizon"
+        resolution:
+          $ref: "#/components/schemas/Resolution"
+        route_ids:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+          minItems: 1
+          uniqueItems: true
+        aggregation_method:
+          type: string
+        availability:
+          type: string
+          enum:
+            - available
+            - unavailable
+        unavailable_reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        allowed_as_of_start:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        allowed_as_of_end:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        forecast_start_min:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        forecast_start_max:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        start_alignment:
+          type: string
+          enum:
+            - local_midnight
+            - month_start
+        evaluation_status:
+          type: string
+          enum:
+            - pending
+            - complete
+            - insufficient_history
+        prediction_interval_available:
+          type: boolean
+        limitations:
+          type: array
+          items:
+            type: string
+      description: Границы допустимых as_of и forecast_start включаются; у unavailable могут быть null. Для
+        available границы заполнены. Допустимость также зависит от маршрутов, истории и модели на дату as_of;
+        точная проверка при POST. year/month начинается первого числа. Метрика и единица совпадают со
+        связанным профилем истории.
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - dataset_revision_id
+        - network_revision_id
+        - source_mode
+        - timezone
+        - observation_profiles
+        - forecast_profiles
+        - max_page_size
+        - max_routes_per_run
+        - warnings
+      properties:
+        dataset_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        timezone:
+          type: string
+          const: Europe/Moscow
+        observation_profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservationProfile"
+        forecast_profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastProfile"
+        max_page_size:
+          type: integer
+          const: 1000
+        max_routes_per_run:
+          type: integer
+          const: 100
+        warnings:
+          type: array
+          items:
+            type: string
+    Route:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - number
+        - name
+        - valid_from
+        - valid_to
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        number:
+          type: string
+        name:
+          type: string
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          anyOf:
+            - type: string
+              format: date
+            - type: "null"
+      description: valid_to — исключающая дата или null. ID стабилен внутри версии сети; number не используется как ключ.
+    Stop:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - geometry
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        name:
+          type: string
+        geometry:
+          anyOf:
+            - $ref: "#/components/schemas/PointGeometry"
+            - type: "null"
+    RouteStop:
+      type: object
+      additionalProperties: false
+      required:
+        - stop_id
+        - sequence
+      properties:
+        stop_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        sequence:
+          type: integer
+          minimum: 1
+    Segment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - from_stop_id
+        - to_stop_id
+        - from_sequence
+        - to_sequence
+        - geometry
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        from_stop_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        to_stop_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        from_sequence:
+          type: integer
+          minimum: 1
+        to_sequence:
+          type: integer
+          minimum: 1
+        geometry:
+          anyOf:
+            - $ref: "#/components/schemas/LineGeometry"
+            - type: "null"
+    Direction:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - stops
+        - segments
+        - geometry
+      properties:
+        id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+          description: null, если в источнике направление не различается.
+        name:
+          type: string
+        stops:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteStop"
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Segment"
+        geometry:
+          anyOf:
+            - oneOf:
+                - $ref: "#/components/schemas/LineGeometry"
+                - $ref: "#/components/schemas/MultiLineGeometry"
+            - type: "null"
+    RouteDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - network_revision_id
+        - valid_at
+        - route
+        - directions
+        - stops
+        - warnings
+      properties:
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        valid_at:
+          type: string
+          format: date
+        route:
+          $ref: "#/components/schemas/Route"
+        directions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Direction"
+        stops:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stop"
+        warnings:
+          type: array
+          items:
+            type: string
+      description: Версия справочника и дата действия обязательны. Порядок остановок задаёт sequence; геометрия
+        может отсутствовать и не синтезируется молча.
+    RoutePage:
+      type: object
+      additionalProperties: false
+      required:
+        - network_revision_id
+        - valid_at
+        - items
+        - page
+      properties:
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        valid_at:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Route"
+        page:
+          $ref: "#/components/schemas/Page"
+    StopPage:
+      type: object
+      additionalProperties: false
+      required:
+        - network_revision_id
+        - valid_at
+        - items
+        - page
+      properties:
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        valid_at:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stop"
+        page:
+          $ref: "#/components/schemas/Page"
+    ObservationPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - spatial
+        - interval_start
+        - interval_end
+        - value
+        - missing_reason
+        - value_kind
+        - estimation_method
+        - quality
+      properties:
+        spatial:
+          $ref: "#/components/schemas/SpatialKey"
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        value:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        missing_reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        value_kind:
+          type: string
+          enum:
+            - observed
+            - estimated
+        estimation_method:
+          anyOf:
+            - type: string
+            - type: "null"
+        quality:
+          $ref: "#/components/schemas/Quality"
+      description: Значение за [interval_start, interval_end). Если value=null, missing_reason заполнена. Для
+        estimated estimation_method обязателен и не null; пропуск наблюдения сохраняет выбранный value_kind.
+      allOf:
+        - if:
+            properties:
+              value:
+                type: "null"
+          then:
+            properties:
+              missing_reason:
+                type: string
+                minLength: 1
+          else:
+            properties:
+              missing_reason:
+                type: "null"
+        - if:
+            properties:
+              value_kind:
+                const: estimated
+          then:
+            properties:
+              estimation_method:
+                type: string
+                minLength: 1
+          else:
+            properties:
+              estimation_method:
+                type: "null"
+    ObservationPage:
+      type: object
+      additionalProperties: false
+      required:
+        - dataset_revision_id
+        - network_revision_id
+        - source_mode
+        - profile
+        - items
+        - page
+      properties:
+        dataset_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        profile:
+          $ref: "#/components/schemas/ObservationProfile"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservationPoint"
+        page:
+          $ref: "#/components/schemas/Page"
+    CreateForecastRun:
+      type: object
+      additionalProperties: false
+      required:
+        - dataset_revision_id
+        - profile_id
+        - route_ids
+        - as_of
+        - forecast_start
+      properties:
+        dataset_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        profile_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        route_ids:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+        as_of:
+          type: string
+          format: date-time
+        forecast_start:
+          type: string
+          format: date-time
+      description: Применение опубликованной модели. Модель выбирается сервером для профиля и as_of и закрепляется в
+        запуске. Нельзя использовать наблюдения или признаки, неизвестные на as_of. forecast_start >= as_of;
+        начало в 00:00 Europe/Moscow, для year/month — первое число. Горизонт, показатель и шаг задаются
+        профилем; направления/остановки фильтруются при чтении результата.
+    ModelReference:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+        - method
+        - training_history_end
+        - feature_set_version
+        - is_baseline
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        version:
+          type: string
+        method:
+          type: string
+        training_history_end:
+          type: string
+          format: date-time
+        feature_set_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        is_baseline:
+          type: boolean
+      description: training_history_end <= as_of. Дата реального обучения может быть позднее при воспроизводимом
+        backtesting, но доступность всех данных и подбор модели ограничены as_of.
+    RunFailure:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - retryable
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+    ForecastRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - dataset_revision_id
+        - network_revision_id
+        - profile
+        - route_ids
+        - source_mode
+        - timezone
+        - as_of
+        - history_end
+        - forecast_start
+        - forecast_end
+        - model
+        - created_at
+        - started_at
+        - calculated_at
+        - finished_at
+        - point_count
+        - quality
+        - warnings
+        - failure
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        dataset_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        profile:
+          $ref: "#/components/schemas/ForecastProfile"
+        route_ids:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        timezone:
+          type: string
+          const: Europe/Moscow
+        as_of:
+          type: string
+          format: date-time
+        history_end:
+          type: string
+          format: date-time
+        forecast_start:
+          type: string
+          format: date-time
+        forecast_end:
+          type: string
+          format: date-time
+        model:
+          $ref: "#/components/schemas/ModelReference"
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        calculated_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Заполнено только после успешного завершения.
+        finished_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Заполнено для succeeded и failed.
+        point_count:
+          type: integer
+          minimum: 0
+        quality:
+          $ref: "#/components/schemas/Quality"
+        warnings:
+          type: array
+          items:
+            type: string
+        failure:
+          anyOf:
+            - $ref: "#/components/schemas/RunFailure"
+            - type: "null"
+      description: Снимок параметров запуска; профиль, модель и версии фиксируются при создании. До succeeded
+        point_count=0 и результаты не опубликованы. Допустимые переходы queued→running→succeeded|failed;
+        внутренние повторы worker не создают новый run_id. history_end <= as_of <= forecast_start <
+        forecast_end. Месяц/год прибавляются календарно с ограничением числом дней целевого месяца.
+      allOf:
+        - if:
+            properties:
+              status:
+                const: succeeded
+          then:
+            properties:
+              calculated_at:
+                type: string
+                format: date-time
+              finished_at:
+                type: string
+                format: date-time
+              started_at:
+                type: string
+                format: date-time
+              failure:
+                type: "null"
+        - if:
+            properties:
+              status:
+                const: failed
+          then:
+            properties:
+              calculated_at:
+                type: "null"
+              finished_at:
+                type: string
+                format: date-time
+              failure:
+                $ref: "#/components/schemas/RunFailure"
+        - if:
+            properties:
+              status:
+                enum:
+                  - queued
+                  - running
+          then:
+            properties:
+              calculated_at:
+                type: "null"
+              finished_at:
+                type: "null"
+              failure:
+                type: "null"
+              point_count:
+                const: 0
+    ForecastRunPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastRun"
+        page:
+          $ref: "#/components/schemas/Page"
+    PredictionInterval:
+      type: object
+      additionalProperties: false
+      required:
+        - lower
+        - upper
+        - nominal_coverage
+        - method
+      properties:
+        lower:
+          type: number
+          minimum: 0
+        upper:
+          type: number
+          minimum: 0
+        nominal_coverage:
+          type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1
+        method:
+          type: string
+      description: Необязательный диапазон P1. lower <= прогноз <= upper; фактическое покрытие проверяется отдельно
+        в evaluation. Номинальное покрытие не является вероятностью точного равенства прогнозу.
+    ForecastPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - spatial
+        - interval_start
+        - interval_end
+        - value
+        - missing_reason
+        - value_kind
+        - prediction_interval
+        - quality
+      properties:
+        spatial:
+          $ref: "#/components/schemas/SpatialKey"
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        value:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        missing_reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        value_kind:
+          type: string
+          const: forecast
+        prediction_interval:
+          anyOf:
+            - $ref: "#/components/schemas/PredictionInterval"
+            - type: "null"
+        quality:
+          $ref: "#/components/schemas/Quality"
+      description: Показатель, единица, шаг, происхождение входа и версия находятся в run. Для null обязательна
+        причина, диапазон null. Значение прогноза может быть дробным даже для количества оплат.
+      allOf:
+        - if:
+            properties:
+              value:
+                type: "null"
+          then:
+            properties:
+              missing_reason:
+                type: string
+                minLength: 1
+              prediction_interval:
+                type: "null"
+          else:
+            properties:
+              missing_reason:
+                type: "null"
+      examples:
+        - spatial:
+            level: stop
+            route_id: demo-route-01
+            direction_id: demo-outbound
+            stop_id: demo-stop-01
+            stop_sequence: 1
+            segment_id: null
+          interval_start: 2026-09-21T08:00:00+03:00
+          interval_end: 2026-09-21T09:00:00+03:00
+          value: 42.5
+          missing_reason: null
+          value_kind: forecast
+          prediction_interval: null
+          quality:
+            status: unverified
+            coverage_ratio: null
+            flags:
+              - synthetic_example
+        - spatial:
+            level: stop
+            route_id: demo-route-01
+            direction_id: demo-outbound
+            stop_id: demo-stop-01
+            stop_sequence: 1
+            segment_id: null
+          interval_start: 2026-09-21T08:00:00+03:00
+          interval_end: 2026-09-21T09:00:00+03:00
+          value: null
+          missing_reason: insufficient_series_history
+          value_kind: forecast
+          prediction_interval: null
+          quality:
+            status: missing
+            coverage_ratio: 0
+            flags:
+              - insufficient_series_history
+    ForecastPointPage:
+      type: object
+      additionalProperties: false
+      required:
+        - run
+        - items
+        - page
+      properties:
+        run:
+          $ref: "#/components/schemas/ForecastRun"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastPoint"
+        page:
+          $ref: "#/components/schemas/Page"
+    ForecastFeature:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - geometry
+        - properties
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+        geometry:
+          anyOf:
+            - $ref: "#/components/schemas/Geometry"
+            - type: "null"
+        properties:
+          $ref: "#/components/schemas/ForecastPoint"
+      description: stop → Point; segment → LineString; route/route_direction → LineString или MultiLineString. При
+        отсутствующей геометрии geometry=null и quality.flags содержит missing_geometry. ID стабилен в рамках
+        запуска и интервала.
+    ForecastMap:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - features
+        - run
+        - interval_start
+        - interval_end
+        - page
+      properties:
+        type:
+          type: string
+          const: FeatureCollection
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastFeature"
+        run:
+          $ref: "#/components/schemas/ForecastRun"
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        page:
+          $ref: "#/components/schemas/Page"
+      description: GeoJSON с дополнительными членами run/page. Ровно один сохранённый интервал. Значения совпадают с
+        /points при тех же фильтрах; никакой скрытой агрегации. Нужно получить все страницы.
+    EvaluationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - dataset_revision_id
+        - network_revision_id
+        - source_mode
+        - profile
+        - model
+        - status
+        - created_at
+        - limitations
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataset_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        network_revision_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        source_mode:
+          $ref: "#/components/schemas/SourceMode"
+        profile:
+          $ref: "#/components/schemas/ForecastProfile"
+        model:
+          $ref: "#/components/schemas/ModelReference"
+        status:
+          type: string
+          enum:
+            - complete
+            - insufficient_history
+            - unavailable
+        created_at:
+          type: string
+          format: date-time
+        limitations:
+          type: array
+          items:
+            type: string
+      description: complete означает выполненную проверку, а не превосходство над базой. Недостаточная история
+        сохраняет открытый критерий приёмки.
+    EvaluationFold:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - as_of
+        - training_start
+        - training_end
+        - test_start
+        - test_end
+        - point_count
+        - model
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        as_of:
+          type: string
+          format: date-time
+        training_start:
+          type: string
+          format: date-time
+        training_end:
+          type: string
+          format: date-time
+        test_start:
+          type: string
+          format: date-time
+        test_end:
+          type: string
+          format: date-time
+        point_count:
+          type: integer
+          minimum: 0
+        model:
+          $ref: "#/components/schemas/ModelReference"
+      description: training_end <= as_of <= test_start; длина теста равна горизонту. Все границы справа исключающие.
+        Параметры моделей подбираются внутри обучающей части.
+    EvaluationScore:
+      type: object
+      additionalProperties: false
+      required:
+        - method
+        - route_id
+        - demand_slice
+        - sample_count
+        - excluded_count
+        - sum_actual
+        - mae
+        - wape
+        - wape_unavailable_reason
+        - interval_coverage
+        - mean_interval_width
+      properties:
+        method:
+          type: string
+          enum:
+            - model
+            - seasonal_naive
+            - regression
+        route_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: "null"
+        demand_slice:
+          type: string
+          enum:
+            - all
+            - peak
+        sample_count:
+          type: integer
+          minimum: 0
+        excluded_count:
+          type: integer
+          minimum: 0
+        sum_actual:
+          type: number
+          minimum: 0
+        mae:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        wape:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        wape_unavailable_reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        interval_coverage:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: "null"
+        mean_interval_width:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+      description: route_id=null — все маршруты выборки. MAE в единицах показателя;
+        WAPE=sum(abs(error))/sum(actual), доля без верхней границы. Если sum_actual=0 или sample_count=0,
+        WAPE=null с причиной; MAE=null при sample_count=0. Базовые методы и модель сравниваются на одинаковых
+        точках. Средние ошибки маршрутов не усреднять вместо расчёта на общей выборке.
+    EvaluationReport:
+      type: object
+      additionalProperties: false
+      required:
+        - summary
+        - folds
+        - scores
+        - peak_rule
+        - baseline_definitions
+        - feature_availability_policy
+        - warnings
+      properties:
+        summary:
+          $ref: "#/components/schemas/EvaluationSummary"
+        folds:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationFold"
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationScore"
+        peak_rule:
+          type: string
+        baseline_definitions:
+          type: object
+          additionalProperties: false
+          required:
+            - seasonal_naive
+            - regression
+          properties:
+            seasonal_naive:
+              type: string
+            regression:
+              anyOf:
+                - type: string
+                - type: "null"
+        feature_availability_policy:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    EvaluationPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationSummary"
+        page:
+          $ref: "#/components/schemas/Page"
+    EvaluationPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - fold_id
+        - spatial
+        - interval_start
+        - interval_end
+        - actual
+        - actual_kind
+        - model
+        - seasonal_naive
+        - regression
+        - prediction_interval
+        - is_peak
+        - scored
+        - exclusion_reason
+        - quality
+      properties:
+        fold_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        spatial:
+          $ref: "#/components/schemas/SpatialKey"
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        actual:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        actual_kind:
+          type: string
+          enum:
+            - observed
+            - estimated
+        model:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        seasonal_naive:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        regression:
+          anyOf:
+            - type: number
+              minimum: 0
+            - type: "null"
+        prediction_interval:
+          anyOf:
+            - $ref: "#/components/schemas/PredictionInterval"
+            - type: "null"
+        is_peak:
+          type: boolean
+        scored:
+          type: boolean
+        exclusion_reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        quality:
+          $ref: "#/components/schemas/Quality"
+      description: scored=true только при наличии actual/model/seasonal_naive; для включённой в отчёт регрессии
+        также требуется её значение. Иначе exclusion_reason заполнена. Регрессия null, если метод не
+        оценивался. Факт и оценки факта различаются actual_kind.
+    EvaluationPointPage:
+      type: object
+      additionalProperties: false
+      required:
+        - summary
+        - items
+        - page
+      properties:
+        summary:
+          $ref: "#/components/schemas/EvaluationSummary"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationPoint"
+        page:
+          $ref: "#/components/schemas/Page"
+  examples:
+    CreateForecast:
+      summary: Синтетический дневной расчёт
+      value:
+        dataset_revision_id: demo-data-v1
+        profile_id: demo-validations-stop-day-hour
+        route_ids:
+          - demo-route-01
+        as_of: 2026-09-20T18:00:00+03:00
+        forecast_start: 2026-09-21T00:00:00+03:00
+    QueuedRun:
+      summary: Задание создано; вычисление ещё не выполнено
+      value:
+        id: 11111111-1111-4111-8111-111111111111
+        status: queued
+        dataset_revision_id: demo-data-v1
+        network_revision_id: demo-network-v1
+        profile:
+          id: demo-validations-stop-day-hour
+          observation_profile_id: demo-validations-stop-hour
+          metric: validations
+          unit: validations
+          spatial_level: stop
+          horizon: day
+          resolution: hour
+          route_ids:
+            - demo-route-01
+          aggregation_method: sum
+          availability: available
+          unavailable_reason: null
+          allowed_as_of_start: 2026-09-20T00:00:00+03:00
+          allowed_as_of_end: 2026-09-20T18:00:00+03:00
+          forecast_start_min: 2026-09-21T00:00:00+03:00
+          forecast_start_max: 2026-09-22T00:00:00+03:00
+          start_alignment: local_midnight
+          evaluation_status: pending
+          prediction_interval_available: false
+          limitations:
+            - Синтетический пример; оценки качества отсутствуют.
+        route_ids:
+          - demo-route-01
+        source_mode: demo
+        timezone: Europe/Moscow
+        as_of: 2026-09-20T18:00:00+03:00
+        history_end: 2026-09-20T00:00:00+03:00
+        forecast_start: 2026-09-21T00:00:00+03:00
+        forecast_end: 2026-09-22T00:00:00+03:00
+        model:
+          id: demo-model-01
+          version: demo-v1
+          method: seasonal_naive
+          training_history_end: 2026-09-20T00:00:00+03:00
+          feature_set_version: demo-features-v1
+          is_baseline: true
+        created_at: 2026-09-20T18:01:00+03:00
+        started_at: null
+        calculated_at: null
+        finished_at: null
+        point_count: 0
+        quality:
+          status: unverified
+          coverage_ratio: null
+          flags:
+            - synthetic_example
+        warnings:
+          - Все значения примера вымышлены.
+        failure: null
+    CompletedRun:
+      summary: Синтетический завершённый расчёт
+      value:
+        id: 11111111-1111-4111-8111-111111111111
+        status: succeeded
+        dataset_revision_id: demo-data-v1
+        network_revision_id: demo-network-v1
+        profile:
+          id: demo-validations-stop-day-hour
+          observation_profile_id: demo-validations-stop-hour
+          metric: validations
+          unit: validations
+          spatial_level: stop
+          horizon: day
+          resolution: hour
+          route_ids:
+            - demo-route-01
+          aggregation_method: sum
+          availability: available
+          unavailable_reason: null
+          allowed_as_of_start: 2026-09-20T00:00:00+03:00
+          allowed_as_of_end: 2026-09-20T18:00:00+03:00
+          forecast_start_min: 2026-09-21T00:00:00+03:00
+          forecast_start_max: 2026-09-22T00:00:00+03:00
+          start_alignment: local_midnight
+          evaluation_status: pending
+          prediction_interval_available: false
+          limitations:
+            - Синтетический пример; оценки качества отсутствуют.
+        route_ids:
+          - demo-route-01
+        source_mode: demo
+        timezone: Europe/Moscow
+        as_of: 2026-09-20T18:00:00+03:00
+        history_end: 2026-09-20T00:00:00+03:00
+        forecast_start: 2026-09-21T00:00:00+03:00
+        forecast_end: 2026-09-22T00:00:00+03:00
+        model:
+          id: demo-model-01
+          version: demo-v1
+          method: seasonal_naive
+          training_history_end: 2026-09-20T00:00:00+03:00
+          feature_set_version: demo-features-v1
+          is_baseline: true
+        created_at: 2026-09-20T18:01:00+03:00
+        started_at: 2026-09-20T18:01:01+03:00
+        calculated_at: 2026-09-20T18:01:03+03:00
+        finished_at: 2026-09-20T18:01:03+03:00
+        point_count: 24
+        quality:
+          status: unverified
+          coverage_ratio: null
+          flags:
+            - synthetic_example
+        warnings:
+          - Все значения примера вымышлены.
+        failure: null
+    ForecastPoints:
+      summary: Пример выборки одного часа (from=08:00, to=09:00)
+      value:
+        run:
+          id: 11111111-1111-4111-8111-111111111111
+          status: succeeded
+          dataset_revision_id: demo-data-v1
+          network_revision_id: demo-network-v1
+          profile:
+            id: demo-validations-stop-day-hour
+            observation_profile_id: demo-validations-stop-hour
+            metric: validations
+            unit: validations
+            spatial_level: stop
+            horizon: day
+            resolution: hour
+            route_ids:
+              - demo-route-01
+            aggregation_method: sum
+            availability: available
+            unavailable_reason: null
+            allowed_as_of_start: 2026-09-20T00:00:00+03:00
+            allowed_as_of_end: 2026-09-20T18:00:00+03:00
+            forecast_start_min: 2026-09-21T00:00:00+03:00
+            forecast_start_max: 2026-09-22T00:00:00+03:00
+            start_alignment: local_midnight
+            evaluation_status: pending
+            prediction_interval_available: false
+            limitations:
+              - Синтетический пример; оценки качества отсутствуют.
+          route_ids:
+            - demo-route-01
+          source_mode: demo
+          timezone: Europe/Moscow
+          as_of: 2026-09-20T18:00:00+03:00
+          history_end: 2026-09-20T00:00:00+03:00
+          forecast_start: 2026-09-21T00:00:00+03:00
+          forecast_end: 2026-09-22T00:00:00+03:00
+          model:
+            id: demo-model-01
+            version: demo-v1
+            method: seasonal_naive
+            training_history_end: 2026-09-20T00:00:00+03:00
+            feature_set_version: demo-features-v1
+            is_baseline: true
+          created_at: 2026-09-20T18:01:00+03:00
+          started_at: 2026-09-20T18:01:01+03:00
+          calculated_at: 2026-09-20T18:01:03+03:00
+          finished_at: 2026-09-20T18:01:03+03:00
+          point_count: 24
+          quality:
+            status: unverified
+            coverage_ratio: null
+            flags:
+              - synthetic_example
+          warnings:
+            - Все значения примера вымышлены.
+          failure: null
+        items:
+          - spatial:
+              level: stop
+              route_id: demo-route-01
+              direction_id: demo-outbound
+              stop_id: demo-stop-01
+              stop_sequence: 1
+              segment_id: null
+            interval_start: 2026-09-21T08:00:00+03:00
+            interval_end: 2026-09-21T09:00:00+03:00
+            value: 42.5
+            missing_reason: null
+            value_kind: forecast
+            prediction_interval: null
+            quality:
+              status: unverified
+              coverage_ratio: null
+              flags:
+                - synthetic_example
+        page:
+          next_cursor: null
+          has_more: false
+    ForecastMap:
+      summary: Тот же час и та же точка для карты
+      value:
+        type: FeatureCollection
+        features:
+          - type: Feature
+            id: demo-stop-01-1-20260921T0800
+            geometry:
+              type: Point
+              coordinates:
+                - 37.62
+                - 55.75
+            properties:
+              spatial:
+                level: stop
+                route_id: demo-route-01
+                direction_id: demo-outbound
+                stop_id: demo-stop-01
+                stop_sequence: 1
+                segment_id: null
+              interval_start: 2026-09-21T08:00:00+03:00
+              interval_end: 2026-09-21T09:00:00+03:00
+              value: 42.5
+              missing_reason: null
+              value_kind: forecast
+              prediction_interval: null
+              quality:
+                status: unverified
+                coverage_ratio: null
+                flags:
+                  - synthetic_example
+        run:
+          id: 11111111-1111-4111-8111-111111111111
+          status: succeeded
+          dataset_revision_id: demo-data-v1
+          network_revision_id: demo-network-v1
+          profile:
+            id: demo-validations-stop-day-hour
+            observation_profile_id: demo-validations-stop-hour
+            metric: validations
+            unit: validations
+            spatial_level: stop
+            horizon: day
+            resolution: hour
+            route_ids:
+              - demo-route-01
+            aggregation_method: sum
+            availability: available
+            unavailable_reason: null
+            allowed_as_of_start: 2026-09-20T00:00:00+03:00
+            allowed_as_of_end: 2026-09-20T18:00:00+03:00
+            forecast_start_min: 2026-09-21T00:00:00+03:00
+            forecast_start_max: 2026-09-22T00:00:00+03:00
+            start_alignment: local_midnight
+            evaluation_status: pending
+            prediction_interval_available: false
+            limitations:
+              - Синтетический пример; оценки качества отсутствуют.
+          route_ids:
+            - demo-route-01
+          source_mode: demo
+          timezone: Europe/Moscow
+          as_of: 2026-09-20T18:00:00+03:00
+          history_end: 2026-09-20T00:00:00+03:00
+          forecast_start: 2026-09-21T00:00:00+03:00
+          forecast_end: 2026-09-22T00:00:00+03:00
+          model:
+            id: demo-model-01
+            version: demo-v1
+            method: seasonal_naive
+            training_history_end: 2026-09-20T00:00:00+03:00
+            feature_set_version: demo-features-v1
+            is_baseline: true
+          created_at: 2026-09-20T18:01:00+03:00
+          started_at: 2026-09-20T18:01:01+03:00
+          calculated_at: 2026-09-20T18:01:03+03:00
+          finished_at: 2026-09-20T18:01:03+03:00
+          point_count: 24
+          quality:
+            status: unverified
+            coverage_ratio: null
+            flags:
+              - synthetic_example
+          warnings:
+            - Все значения примера вымышлены.
+          failure: null
+        interval_start: 2026-09-21T08:00:00+03:00
+        interval_end: 2026-09-21T09:00:00+03:00
+        page:
+          next_cursor: null
+          has_more: false
+    Capabilities:
+      summary: Синтетические профили трёх обязательных горизонтов
+      value:
+        dataset_revision_id: demo-data-v1
+        network_revision_id: demo-network-v1
+        source_mode: demo
+        timezone: Europe/Moscow
+        observation_profiles:
+          - id: demo-validations-stop-hour
+            metric: validations
+            unit: validations
+            spatial_level: stop
+            resolution: hour
+            route_ids:
+              - demo-route-01
+            history_start: 2024-01-01T00:00:00+03:00
+            history_end: 2026-09-20T00:00:00+03:00
+            aggregation_method: sum
+            limitations:
+              - Синтетический пример; не подтверждает качество модели.
+          - id: demo-validations-route-day
+            metric: validations
+            unit: validations
+            spatial_level: route
+            resolution: day
+            route_ids:
+              - demo-route-01
+            history_start: 2024-01-01T00:00:00+03:00
+            history_end: 2026-09-20T00:00:00+03:00
+            aggregation_method: sum
+            limitations:
+              - Синтетический пример; не подтверждает качество модели.
+          - id: demo-validations-route-month
+            metric: validations
+            unit: validations
+            spatial_level: route
+            resolution: month
+            route_ids:
+              - demo-route-01
+            history_start: 2024-01-01T00:00:00+03:00
+            history_end: 2026-09-01T00:00:00+03:00
+            aggregation_method: sum
+            limitations:
+              - Синтетический пример; не подтверждает качество модели.
+        forecast_profiles:
+          - id: demo-validations-stop-day-hour
+            observation_profile_id: demo-validations-stop-hour
+            metric: validations
+            unit: validations
+            spatial_level: stop
+            horizon: day
+            resolution: hour
+            route_ids:
+              - demo-route-01
+            aggregation_method: sum
+            availability: available
+            unavailable_reason: null
+            allowed_as_of_start: 2026-09-20T00:00:00+03:00
+            allowed_as_of_end: 2026-09-20T18:00:00+03:00
+            forecast_start_min: 2026-09-21T00:00:00+03:00
+            forecast_start_max: 2026-09-22T00:00:00+03:00
+            start_alignment: local_midnight
+            evaluation_status: pending
+            prediction_interval_available: false
+            limitations:
+              - Синтетический пример; оценки качества отсутствуют.
+          - id: demo-validations-route-month-day
+            observation_profile_id: demo-validations-route-day
+            metric: validations
+            unit: validations
+            spatial_level: route
+            horizon: month
+            resolution: day
+            route_ids:
+              - demo-route-01
+            aggregation_method: sum
+            availability: available
+            unavailable_reason: null
+            allowed_as_of_start: 2026-09-20T00:00:00+03:00
+            allowed_as_of_end: 2026-09-20T18:00:00+03:00
+            forecast_start_min: 2026-09-21T00:00:00+03:00
+            forecast_start_max: 2026-09-21T00:00:00+03:00
+            start_alignment: local_midnight
+            evaluation_status: pending
+            prediction_interval_available: false
+            limitations:
+              - Синтетический пример; оценки качества отсутствуют.
+          - id: demo-validations-route-year-month
+            observation_profile_id: demo-validations-route-month
+            metric: validations
+            unit: validations
+            spatial_level: route
+            horizon: year
+            resolution: month
+            route_ids:
+              - demo-route-01
+            aggregation_method: sum
+            availability: available
+            unavailable_reason: null
+            allowed_as_of_start: 2026-09-20T00:00:00+03:00
+            allowed_as_of_end: 2026-09-20T18:00:00+03:00
+            forecast_start_min: 2026-10-01T00:00:00+03:00
+            forecast_start_max: 2026-10-01T00:00:00+03:00
+            start_alignment: month_start
+            evaluation_status: pending
+            prediction_interval_available: false
+            limitations:
+              - Синтетический пример; оценки качества отсутствуют.
+        max_page_size: 1000
+        max_routes_per_run: 100
+        warnings:
+          - Все профили в примере вымышлены; в реализации они зависят от аудита.
+    Observations:
+      summary: Синтетическая история оплат
+      value:
+        dataset_revision_id: demo-data-v1
+        network_revision_id: demo-network-v1
+        source_mode: demo
+        profile:
+          id: demo-validations-stop-hour
+          metric: validations
+          unit: validations
+          spatial_level: stop
+          resolution: hour
+          route_ids:
+            - demo-route-01
+          history_start: 2024-01-01T00:00:00+03:00
+          history_end: 2026-09-20T00:00:00+03:00
+          aggregation_method: sum
+          limitations:
+            - Синтетический пример; не подтверждает качество модели.
+        items:
+          - spatial:
+              level: stop
+              route_id: demo-route-01
+              direction_id: demo-outbound
+              stop_id: demo-stop-01
+              stop_sequence: 1
+              segment_id: null
+            interval_start: 2026-09-19T08:00:00+03:00
+            interval_end: 2026-09-19T09:00:00+03:00
+            value: 40
+            missing_reason: null
+            value_kind: observed
+            estimation_method: null
+            quality:
+              status: unverified
+              coverage_ratio: null
+              flags:
+                - synthetic_example
+        page:
+          next_cursor: null
+          has_more: false
+    DataStatus:
+      summary: Быстрая загрузка старой истории не является live
+      value:
+        checked_at: 2026-09-20T18:02:00+03:00
+        dataset_revision_id: demo-data-v1
+        network_revision_id: demo-network-v1
+        source_mode: demo
+        sources:
+          - source: validations
+            source_mode: demo
+            event_watermark: 2026-09-19T23:59:00+03:00
+            ingested_at: 2026-09-20T17:00:00+03:00
+            freshness: unknown
+            stale_after_seconds: null
+            quality:
+              status: unverified
+              coverage_ratio: null
+              flags:
+                - synthetic_example
+        recommended_poll_seconds: 30
+        warnings:
+          - Синтетические данные; живой источник не подключён.
+    CreateForecastMonth:
+      summary: "Синтетический запрос: month"
+      value:
+        dataset_revision_id: demo-data-v1
+        profile_id: demo-validations-route-month-day
+        route_ids:
+          - demo-route-01
+        as_of: 2026-09-20T18:00:00+03:00
+        forecast_start: 2026-09-21T00:00:00+03:00
+    CreateForecastYear:
+      summary: "Синтетический запрос: year"
+      value:
+        dataset_revision_id: demo-data-v1
+        profile_id: demo-validations-route-year-month
+        route_ids:
+          - demo-route-01
+        as_of: 2026-09-20T18:00:00+03:00
+        forecast_start: 2026-10-01T00:00:00+03:00
+    MissingForecastPoint:
+      summary: Пропуск не заменяется нулём
+      value:
+        spatial:
+          level: stop
+          route_id: demo-route-01
+          direction_id: demo-outbound
+          stop_id: demo-stop-01
+          stop_sequence: 1
+          segment_id: null
+        interval_start: 2026-09-21T08:00:00+03:00
+        interval_end: 2026-09-21T09:00:00+03:00
+        value: null
+        missing_reason: insufficient_series_history
+        value_kind: forecast
+        prediction_interval: null
+        quality:
+          status: missing
+          coverage_ratio: 0
+          flags:
+            - insufficient_series_history
