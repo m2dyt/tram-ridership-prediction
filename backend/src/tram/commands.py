@@ -4,6 +4,9 @@ from pathlib import Path
 
 
 def register(parsers):
+    from tram.metro_commands import register as register_metro
+
+    register_metro(parsers)
     occupancy = parsers.add_parser(
         "export-occupancy",
         help="Export vehicle-time-weighted segment estimates as a prepared bundle",
@@ -50,6 +53,11 @@ def register(parsers):
 
 
 def execute(args):
+    if args.command in ("prepare-metro", "evaluate-metro"):
+        from tram.metro_commands import execute as execute_metro
+
+        return execute_metro(args)
+
     import json
 
     from tram.application.occupancy import OccupancyService

@@ -21,3 +21,4 @@
 | [context.py](context.py) | Расстояния и сопоставление внешних снимков по месту, времени и доступности на as_of. |
 | [evaluation.py](evaluation.py) | Полные временные folds и MAE/WAPE с объяснимыми пустыми/нулевыми случаями. |
 | [features.py](features.py) | Календарные признаки Москвы: час, день недели, месяц, выходной. |
+| [quarterly.py](quarterly.py) | Квартальная база метро и rolling-origin оценка, train/validation/test, покрытие и MAE/WAPE; без fit. |

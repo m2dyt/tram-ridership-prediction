@@ -27,6 +27,7 @@
 | [STATUS.md](STATUS.md) | Сопоставление требований ТЗ с кодом и явные ограничения данных, источников и эксплуатации. |
 | [TESTING.md](TESTING.md) | Полный запуск тестов без skip, frontend и временный browser smoke. |
 | [TRAINING_PLAN.md](TRAINING_PLAN.md) | Следующий этап: целевой ряд, очистка, временные splits, признаки, обучение, качество и подключение артефакта. |
+| [METRO_PIPELINE.md](METRO_PIPELINE.md) | Работающие prepare-metro/evaluate-metro: команды, файлы, правила качества, splits, результат базы и ограничения. |
 
 ## Подпапки
 

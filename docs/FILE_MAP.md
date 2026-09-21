@@ -70,6 +70,7 @@
 | [cli.py](../backend/src/tram/cli.py) | Основные команды: диагностика, конфигурация, demo/publish, миграции, API и worker; делегирование дополнительных команд. |
 | [commands.py](../backend/src/tram/commands.py) | CLI для снимков, GeoJSON, CSV, replay, backtesting и экспорта наполненности; соединяет адаптеры со сценариями. |
 | [composition.py](../backend/src/tram/composition.py) | Точка сборки приложения: настройки, SQL, часы, порты, HTTP, ML и раздача frontend/dist. |
+| [metro_commands.py](../backend/src/tram/metro_commands.py) | Отдельные prepare-metro/evaluate-metro: сборка файловых адаптеров и чистых расчётов без БД. |
 | [README.md](../backend/src/tram/README.md) | Навигация и инструкция компонента. |
 
 ## backend/src/tram/api
@@ -90,6 +91,7 @@
 | [errors.py](../backend/src/tram/application/errors.py) | Ошибки сценариев с кодами для HTTP/CLI. |
 | [evaluation.py](../backend/src/tram/application/evaluation.py) | Оркестрация полных временных folds, прогноз/факт, срезы метрик и публикация отчёта через порты. |
 | [mapping.py](../backend/src/tram/application/mapping.py) | Преобразование JSON пространственных ключей в domain-типы и обратно. |
+| [metro.py](../backend/src/tram/application/metro.py) | Чистая подготовка метро: реестр, плотная квартальная сетка, GeoJSON-документ и отчёт качества. |
 | [occupancy.py](../backend/src/tram/application/occupancy.py) | Сценарии создания/чтения рейса, проверки сети и доступности события, идемпотентные fingerprint. |
 | [occupancy_export.py](../backend/src/tram/application/occupancy_export.py) | Построение проездов по участкам из журналов и prepared bundle восстановленной наполненности. |
 | [ports.py](../backend/src/tram/application/ports.py) | Протоколы repository, clock, cursor, predictor и документы границ. |
@@ -106,6 +108,7 @@
 | [aggregation.py](../backend/src/tram/domain/aggregation.py) | Среднее по длительности проездов, отдельная нормализация на вместимость каждого вагона. |
 | [errors.py](../backend/src/tram/domain/errors.py) | Предметная ошибка нарушения инварианта. |
 | [fleet.py](../backend/src/tram/domain/fleet.py) | Сценарный расчёт числа вагонов, интервала движения и дефицита резерва без оптимизации. |
+| [metro.py](../backend/src/tram/domain/metro.py) | Квартал, исходные записи метро, точка с пропуском, временное разбиение и ID пары названий. |
 | [occupancy.py](../backend/src/tram/domain/occupancy.py) | Распределение групп по остановкам, баланс массы, измеренные высадки, конечная и переполнение. |
 | [README.md](../backend/src/tram/domain/README.md) | Навигация и инструкция компонента. |
 | [series.py](../backend/src/tram/domain/series.py) | Показатели, пространственные ключи, наблюдения и прогнозные точки; проверки значений. |
@@ -124,6 +127,7 @@
 | [demo.py](../backend/src/tram/infrastructure/demo.py) | Синтетические данные текущей даты, сеть из четырёх остановок, запросы, план/журнал рейса и отсечки оценки. |
 | [evaluation.py](../backend/src/tram/infrastructure/evaluation.py) | Выборка фактов и транзакционная публикация проверенных по контракту отчёта и точек оценки. |
 | [geo_import.py](../backend/src/tram/infrastructure/geo_import.py) | Импорт WGS84 Point GeoJSON Москвы с явными полями, проверками координат/ID и SHA-256. |
+| [metro_files.py](../backend/src/tram/infrastructure/metro_files.py) | Чтение схем 624/62743, проверка происхождения и хешей, запись/чтение файлового исследовательского набора. |
 | [publication.py](../backend/src/tram/infrastructure/publication.py) | SQL-публикация набора одной транзакцией, хеширование потока, пакетные вставки и блокировки повторов. |
 | [README.md](../backend/src/tram/infrastructure/README.md) | Навигация и инструкция компонента. |
 | [repository.py](../backend/src/tram/infrastructure/repository.py) | SQL-чтение версий/точек/отчётов, очередь, идемпотентность запросов, lease/fencing и публикация прогнозов. |
@@ -146,6 +150,7 @@
 | [FILE_MAP.md](../docs/FILE_MAP.md) | Полная карта поддерживаемых файлов и ссылок на папки. |
 | [IMPLEMENTATION_LOG.md](../docs/IMPLEMENTATION_LOG.md) | История выполненных шагов: план → реализация → проверки → ревью. |
 | [LOCAL_SETUP.md](../docs/LOCAL_SETUP.md) | Подробности Python/venv и диагностики локального окружения. |
+| [METRO_PIPELINE.md](../docs/METRO_PIPELINE.md) | Команды подготовки и квартальной оценки метро, словарь файлов, правила качества, метрики и ограничения. |
 | [OPERATIONS.md](../docs/OPERATIONS.md) | Готовые команды демо, оценки, источников, GeoJSON/CSV, replay, экспорта и калькулятора. |
 | [PASSENGER_OCCUPANCY.md](../docs/PASSENGER_OCCUPANCY.md) | Математическая постановка восстановления высадок и остатка, сценарии и критерии валидации. |
 | [README.md](../docs/README.md) | Навигация и инструкция компонента. |
@@ -243,6 +248,7 @@
 | [context.py](../ml/src/tram_ml/context.py) | Расстояния и сопоставление внешних снимков по месту, времени и доступности на as_of. |
 | [evaluation.py](../ml/src/tram_ml/evaluation.py) | Полные временные folds и MAE/WAPE с объяснимыми пустыми/нулевыми случаями. |
 | [features.py](../ml/src/tram_ml/features.py) | Календарные признаки Москвы: час, день недели, месяц, выходной. |
+| [quarterly.py](../ml/src/tram_ml/quarterly.py) | Чистая квартальная оценка: splits, сезонная база, последовательные отсечки и MAE/WAPE/покрытие. |
 | [README.md](../ml/src/tram_ml/README.md) | Навигация и инструкция компонента. |
 
 ## scripts
@@ -268,6 +274,7 @@
 | [test_domain_ml.py](../tests/test_domain_ml.py) | Предметные интервалы/ключи, сезонная база, folds и граничные случаи метрик. |
 | [test_evaluation_pipeline.py](../tests/test_evaluation_pipeline.py) | Публикация полных day/month/year отчётов и CSV-пропусков. |
 | [test_fleet.py](../tests/test_fleet.py) | Округление выпуска, резерв, нулевой спрос и контракт сценарного API. |
+| [test_metro_pipeline.py](../tests/test_metro_pipeline.py) | Схемы метро, нули/пропуски, хеши, ID, временные зависимости базы и CLI без БД. |
 | [test_occupancy.py](../tests/test_occupancy.py) | Три сценария, баланс, измеренные высадки, replay/конфликты и контракт API рейсов. |
 | [test_postgres.py](../tests/test_postgres.py) | Реальная конкурентность PostgreSQL: публикация, идемпотентность, SKIP LOCKED, fencing и события рейса. |
 | [test_publication.py](../tests/test_publication.py) | Атомарная публикация, повторы/ошибки/откат, demo и все горизонты. |
@@ -283,7 +290,7 @@
 
 | Файл | Назначение |
 |---|---|
-| [README.md](../data/README.md) | Конкретные файлы демо, будущая структура обработки, очистка, публикация и переход к обучению. |
+| [README.md](../data/README.md) | Файлы демо, подготовленные данные/оценка метро, будущая структура обработки и переход к обучению. |
 
 ## models
 

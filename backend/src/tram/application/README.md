@@ -21,6 +21,7 @@
 | [errors.py](errors.py) | Ошибки сценариев с кодами для HTTP/CLI. |
 | [evaluation.py](evaluation.py) | Оркестрация полных временных folds, прогноз/факт, срезы метрик и публикация отчёта через порты. |
 | [mapping.py](mapping.py) | Преобразование JSON пространственных ключей в domain-типы и обратно. |
+| [metro.py](metro.py) | Подготовка метро: ID пар, GeoJSON, плотные квартальные ряды, пропуски и кандидаты географических связей; без I/O. |
 | [occupancy.py](occupancy.py) | Сценарии создания/чтения рейса, проверки сети и доступности события, идемпотентные fingerprint. |
 | [occupancy_export.py](occupancy_export.py) | Построение проездов по участкам из журналов и prepared bundle восстановленной наполненности. |
 | [ports.py](ports.py) | Протоколы repository, clock, cursor, predictor и документы границ. |

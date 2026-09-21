@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         "evaluate",
         "prepare-csv",
         "export-occupancy",
+        "prepare-metro",
+        "evaluate-metro",
     ):
         from jsonschema.exceptions import ValidationError
 
