@@ -11,9 +11,12 @@ dist/
 .env
 .env.*
 !.env.example
-sources/
-data/
-models/
+sources/*
+!sources/README.md
+data/*
+!data/README.md
+models/*
+!models/README.md
 logs/
 *.log
 .idea/

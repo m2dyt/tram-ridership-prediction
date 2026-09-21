@@ -1,0 +1,360 @@
+{
+  "checked_date": "2026-09-21",
+  "scope": "Direct HTTP link checks plus verified browser downloads; HTTP 200 alone does not establish JSON or data quality",
+  "checks": [
+    {
+      "id": "mos_624",
+      "url": "https://data.mos.ru/opendata/624",
+      "checked_at": "2026-09-21T20:01:36.095047+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/624",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "semantic_check": "Direct GET returned SPA HTML shell; subsequent browser UI and official export verified separately",
+      "browser_ui_check": {
+        "checked_date": "2026-09-21",
+        "result": "Dataset table and passport rendered successfully",
+        "version": "6.8",
+        "updated_date": "2026-09-11",
+        "export_result": "download_verified",
+        "downloaded_record_count": 1177
+      }
+    },
+    {
+      "id": "mos_62743",
+      "url": "https://data.mos.ru/opendata/62743",
+      "checked_at": "2026-09-21T20:01:36.096044+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/62743",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "semantic_check": "Direct GET returned SPA HTML shell; subsequent browser UI and official export verified separately",
+      "browser_ui_check": {
+        "checked_date": "2026-09-21",
+        "result": "Dataset table and passport rendered successfully",
+        "version": "1.35",
+        "updated_date": "2026-09-08",
+        "table_record_count": 6448,
+        "export_result": "download_verified",
+        "downloaded_record_count": 6448
+      }
+    },
+    {
+      "id": "mos_catalog",
+      "url": "https://data.mos.ru/opendata",
+      "checked_at": "2026-09-21T20:01:36.097049+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "semantic_check": "SPA HTML shell returned; identical content on both dataset URLs; dataset rows and export not verified"
+    },
+    {
+      "id": "mos_api",
+      "url": "https://apidata.mos.ru/",
+      "checked_at": "2026-09-21T20:01:36.097049+00:00",
+      "method": "GET",
+      "status_code": 401,
+      "final_url": "https://apidata.mos.ru/",
+      "content_type": "application/json;charset=UTF-8",
+      "bytes": 173,
+      "result": "http_error",
+      "semantic_check": "JSON Unauthorized: api_key required"
+    },
+    {
+      "id": "osm_central",
+      "url": "https://download.geofabrik.de/russia/central-fed-district.html",
+      "checked_at": "2026-09-21T20:01:36.097049+00:00",
+      "method": "GET",
+      "result": "unverified",
+      "error_type": "ConnectTimeout",
+      "browser_research_check": "Official page content retrieved by web research tool on 2026-09-21; local Python ConnectTimeout"
+    },
+    {
+      "id": "osm_license",
+      "url": "https://www.openstreetmap.org/copyright",
+      "checked_at": "2026-09-21T20:01:37.343088+00:00",
+      "method": "GET",
+      "result": "unverified",
+      "error_type": "ConnectTimeout",
+      "browser_research_check": "Official page content retrieved by web research tool on 2026-09-21; local Python ConnectTimeout"
+    },
+    {
+      "id": "weather_archive_docs",
+      "url": "https://open-meteo.com/en/docs/historical-weather-api",
+      "checked_at": "2026-09-21T20:01:37.359117+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/docs/historical-weather-api",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 340125,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_forecast_docs",
+      "url": "https://open-meteo.com/en/docs/historical-forecast-api",
+      "checked_at": "2026-09-21T20:01:37.361116+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/docs/historical-forecast-api",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 489713,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_runs_docs",
+      "url": "https://open-meteo.com/en/docs/single-runs-api",
+      "checked_at": "2026-09-21T20:01:37.361116+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/docs/single-runs-api",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 473128,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_docs",
+      "url": "https://open-meteo.com/en/docs",
+      "checked_at": "2026-09-21T20:01:42.537704+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/docs",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 515110,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_license",
+      "url": "https://open-meteo.com/en/terms",
+      "checked_at": "2026-09-21T20:01:42.587391+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/terms",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 37538,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_pricing",
+      "url": "https://open-meteo.com/en/pricing",
+      "checked_at": "2026-09-21T20:01:42.746826+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://open-meteo.com/en/pricing",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 48017,
+      "result": "http_ok"
+    },
+    {
+      "id": "weather_sample",
+      "url": "https://archive-api.open-meteo.com/v1/archive?latitude=55.75&longitude=37.62&start_date=2025-01-01&end_date=2025-01-07&hourly=temperature_2m,precipitation,wind_speed_10m&timezone=UTC",
+      "checked_at": "2026-09-21T20:01:44.055266+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://archive-api.open-meteo.com/v1/archive?latitude=55.75&longitude=37.62&start_date=2025-01-01&end_date=2025-01-07&hourly=temperature_2m,precipitation,wind_speed_10m&timezone=UTC",
+      "content_type": "application/json; charset=utf-8",
+      "bytes": 5956,
+      "result": "http_ok",
+      "saved_path": "sources/open-meteo/2026-09-21/moscow-2025-01-01_2025-01-07.json",
+      "sha256": "8ef32342b41bc09bbb59028c85d8a2ea55dfc2a2e9bf4d4ea3d9a403be421d85",
+      "hourly_points": 168,
+      "null_values": {
+        "time": 0,
+        "temperature_2m": 0,
+        "precipitation": 0,
+        "wind_speed_10m": 0
+      },
+      "retrieved_at": "2026-09-21T20:01:44.768501+00:00"
+    },
+    {
+      "id": "kudago_docs",
+      "url": "https://docs.kudago.com/api/",
+      "checked_at": "2026-09-21T20:01:44.769468+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://docs.kudago.com/api/",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 450429,
+      "result": "http_ok"
+    },
+    {
+      "id": "kudago_sample",
+      "url": "https://kudago.com/public-api/v1.4/events/?location=msk&page_size=1&fields=id,title,dates,place,site_url&expand=place",
+      "checked_at": "2026-09-21T20:01:45.021494+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://kudago.com/public-api/v1.4/events/?location=msk&page_size=1&fields=id,title,dates,place,site_url&expand=place",
+      "content_type": "application/json",
+      "bytes": 381,
+      "result": "http_ok"
+    },
+    {
+      "id": "timepad_docs",
+      "url": "https://dev.timepad.ru/api/get-v1-events/",
+      "checked_at": "2026-09-21T20:01:45.839401+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://dev.timepad.ru/api/get-v1-events/",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 253825,
+      "result": "http_ok"
+    },
+    {
+      "id": "timepad_sample",
+      "url": "https://api.timepad.ru/v1/events?limit=1",
+      "checked_at": "2026-09-21T20:01:45.860432+00:00",
+      "method": "GET",
+      "status_code": 403,
+      "final_url": "https://api.timepad.ru/v1/events?limit=1",
+      "content_type": "application/json; charset=utf-8",
+      "bytes": 140,
+      "result": "http_error"
+    },
+    {
+      "id": "weatherapi_docs",
+      "url": "https://www.weatherapi.com/docs/",
+      "checked_at": "2026-09-21T20:01:46.656354+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "final_url": "https://www.weatherapi.com/docs/",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 440035,
+      "result": "http_ok"
+    },
+    {
+      "id": "kudago_week_sample",
+      "url": "https://kudago.com/public-api/v1.4/events/?location=msk&page_size=5&fields=id,title,dates,place,site_url&expand=place&actual_since=1789948800&actual_until=1790553600",
+      "checked_at": "2026-09-21T20:03:09.181778+00:00",
+      "method": "GET",
+      "status_code": 200,
+      "result": "http_ok",
+      "saved_path": "sources/kudago/2026-09-21/moscow-events-page-1.json",
+      "sha256": "89777ad4250fed1ea63b520815cfc9f714b371c27b71cef7c892d5d1e500399a",
+      "records": 5,
+      "total_count": 423,
+      "has_next_page": true,
+      "retrieved_at": "2026-09-21T20:03:09.183752+00:00"
+    },
+    {
+      "id": "mos_62743_data",
+      "url": "https://data.mos.ru/opendata/7704786030-PTMMS/data-20260908T1500-structure-20211004T1322.json",
+      "checked_at": "2026-09-21T20:25:27.665799+00:00",
+      "method": "GET",
+      "dataset_id": "62743",
+      "source_version": "1.35",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/7704786030-PTMMS/data-20260908T1500-structure-20211004T1322.json",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "detected_format": "html_or_other"
+    },
+    {
+      "id": "mos_62743_structure",
+      "url": "https://data.mos.ru/opendata/7704786030-PTMMS/structure-20211004T1322.json",
+      "checked_at": "2026-09-21T20:25:27.666743+00:00",
+      "method": "GET",
+      "dataset_id": "62743",
+      "source_version": "1.35",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/7704786030-PTMMS/structure-20211004T1322.json",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "detected_format": "html_or_other"
+    },
+    {
+      "id": "mos_624_data",
+      "url": "https://data.mos.ru/opendata/7704786030-metro/data-20260911T1500-structure-20260618T1354.json",
+      "checked_at": "2026-09-21T20:25:27.666743+00:00",
+      "method": "GET",
+      "dataset_id": "624",
+      "source_version": "6.8",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/7704786030-metro/data-20260911T1500-structure-20260618T1354.json",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "detected_format": "html_or_other"
+    },
+    {
+      "id": "mos_624_structure",
+      "url": "https://data.mos.ru/opendata/7704786030-metro/structure-20260618T1354.json",
+      "checked_at": "2026-09-21T20:25:27.666743+00:00",
+      "method": "GET",
+      "dataset_id": "624",
+      "source_version": "6.8",
+      "status_code": 200,
+      "final_url": "https://data.mos.ru/opendata/7704786030-metro/structure-20260618T1354.json",
+      "content_type": "text/html",
+      "bytes": 91233,
+      "result": "http_ok",
+      "detected_format": "html_or_other"
+    }
+  ],
+  "browser_downloads": [
+    {
+      "dataset_id": "624",
+      "source_url": "https://data.mos.ru/opendata/624",
+      "source_version": "6.8",
+      "retrieved_at": "2026-09-21T20:28:07.488373+00:00",
+      "method": "Browser Export dataset JSON and passport JSON; checked local ZIP integrity, JSON parsing and hashes",
+      "result": "download_verified",
+      "directory": "sources/data-mos/624/2026-09-21",
+      "records": 1177,
+      "artifacts": [
+        {
+          "file": "624JSON.zip",
+          "sha256": "27c6ae356170d5d852b719ab279d35bcc32ca8372b3d7a8ac006888c1a562d42",
+          "bytes": 92758
+        },
+        {
+          "file": "data-624-11-09-2026.json",
+          "sha256": "e0ea6dac269dc3e3384e3790504b186f655bd270db28d9c072ca6aec8c31bf67",
+          "bytes": 1664950,
+          "origin": "extracted byte-for-byte from ZIP"
+        },
+        {
+          "file": "meta_624.json",
+          "sha256": "0c4b60399dde657c9fb1fe4aae54686ace9fb340a7a19bbffbf74ce69bf6f93a",
+          "bytes": 3158
+        }
+      ]
+    },
+    {
+      "dataset_id": "62743",
+      "source_url": "https://data.mos.ru/opendata/62743",
+      "source_version": "1.35",
+      "retrieved_at": "2026-09-21T20:28:07.549381+00:00",
+      "method": "Browser Export dataset JSON and passport JSON; checked local ZIP integrity, JSON parsing and hashes",
+      "result": "download_verified",
+      "directory": "sources/data-mos/62743/2026-09-21",
+      "records": 6448,
+      "artifacts": [
+        {
+          "file": "62743JSON.zip",
+          "sha256": "9c5260c8dee4c54afb391d55b8ab6e79c883b210ca74b9cd167125779dd41195",
+          "bytes": 157650
+        },
+        {
+          "file": "data-62743-08-09-2026.json",
+          "sha256": "a120f21dc5e97b88a96feeab7c209ffaf2578c8a41ed6bea4352c54bc56f7e41",
+          "bytes": 1435823,
+          "origin": "extracted byte-for-byte from ZIP"
+        },
+        {
+          "file": "meta_62743.json",
+          "sha256": "aae6c2b81f680f05e2bad51f58ae041a0770d1d43072e76a8a54ff6dc1adc1c3",
+          "bytes": 1826
+        }
+      ]
+    }
+  ],
+  "local_quality_report": "data/quality/moscow-20260921/audit.json"
+}
