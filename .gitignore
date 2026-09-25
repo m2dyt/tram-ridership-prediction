@@ -21,3 +21,4 @@ logs/
 *.log
 .idea/
 .vscode/
+dataset/

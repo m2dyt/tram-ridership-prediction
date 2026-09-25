@@ -1,0 +1,7 @@
+# GPU training requirements for Tram Ridership Prediction
+# Compatible with NVIDIA CUDA / GPU
+catboost>=1.2.7
+lightgbm>=4.5.0
+scikit-learn>=1.5.0
+pandas>=2.2.0
+numpy>=1.26.0
