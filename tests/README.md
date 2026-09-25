@@ -20,9 +20,10 @@
 | [test_bootstrap.py](test_bootstrap.py) | Миграции up/down и metadata, направление зависимостей, согласованность Python-зависимостей. |
 | [test_context.py](test_context.py) | Фикстуры провайдеров, редактирование секретов из ошибок, as_of-признаки и импорт GeoJSON. |
 | [test_domain_ml.py](test_domain_ml.py) | Предметные интервалы/ключи, сезонная база, folds и граничные случаи метрик. |
-| [test_metro_pipeline.py](test_metro_pipeline.py) | Метро: нули/пропуски, ID, сохранение потока, контроль файлов, временная база, покрытие и CLI без БД. |
 | [test_evaluation_pipeline.py](test_evaluation_pipeline.py) | Публикация полных day/month/year отчётов и CSV-пропусков. |
 | [test_fleet.py](test_fleet.py) | Округление выпуска, резерв, нулевой спрос и контракт сценарного API. |
+| [test_metro_pipeline.py](test_metro_pipeline.py) | Метро: нули/пропуски, ID, сохранение потока, контроль файлов, временная база, покрытие и CLI без БД. |
+| [test_ml_training.py](test_ml_training.py) | Проверка инженерии признаков без утечек и пайплайнов обучения/валидации моделей. |
 | [test_occupancy.py](test_occupancy.py) | Три сценария, баланс, измеренные высадки, replay/конфликты и контракт API рейсов. |
 | [test_postgres.py](test_postgres.py) | Реальная конкурентность PostgreSQL: публикация, идемпотентность, SKIP LOCKED, fencing и события рейса. |
 | [test_publication.py](test_publication.py) | Атомарная публикация, повторы/ошибки/откат, demo и все горизонты. |

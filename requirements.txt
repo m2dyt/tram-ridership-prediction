@@ -3,10 +3,12 @@
 # These are version ranges, not a reproducibility lock file.
 alembic>=1.14,<2
 fastapi>=0.115,<1
+joblib>=1.4,<2
 jsonschema>=4.23,<5
 psycopg[binary]>=3.2,<4
 pydantic-settings>=2.7,<3
 pyyaml>=6,<7
+scikit-learn>=1.5,<2
 sqlalchemy>=2.0,<3
 tzdata>=2025.1
 uvicorn>=0.30,<1

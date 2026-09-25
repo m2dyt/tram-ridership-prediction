@@ -51,3 +51,5 @@ python -m pytest -q tests/test_domain_ml.py tests/test_context.py tests/test_eva
 ## Подпапки
 
 - [src](src/README.md).
+- [training](training/README.md).
+- [experiments](experiments/README.md).

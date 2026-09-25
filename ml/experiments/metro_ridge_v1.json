@@ -1,0 +1,28 @@
+{
+  "experiment_name": "metro_ridge_v1",
+  "description": "Baseline L2 regularized linear regression on seasonal lags and line categories",
+  "model_type": "ridge",
+  "seed": 42,
+  "train_start": "2021-Q1",
+  "validation_start": "2024-Q1",
+  "test_start": "2025-Q1",
+  "test_end": "2026-Q3",
+  "hyperparameters": {
+    "alpha": 10.0
+  },
+  "feature_columns": [
+    "quarter_num",
+    "year",
+    "entrances_count",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "rolling_mean_4",
+    "trend_ratio_yoy"
+  ],
+  "categorical_columns": [
+    "line"
+  ]
+}
