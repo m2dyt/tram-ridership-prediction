@@ -82,6 +82,7 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     df["is_workday"] = ((df["is_weekend"] == 0) & (df["is_holiday"] == 0)).astype(int)
     df["is_day_off"] = ((df["is_weekend"] == 1) | (df["is_holiday"] == 1)).astype(int)
     df["is_summer"] = df["month"].isin([6, 7, 8]).astype(int)
+    df["is_cold_season"] = df["month"].isin([10, 11, 12, 1, 2, 3]).astype(int)
 
     # In transport systems, public holidays operate on Sunday schedule (dow=6),
     # and working Saturdays (pre-holidays) operate on Friday schedule (dow=4).
@@ -134,7 +135,33 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
             columns={"hist_median_route_dow_hour": "hist_median_nonsummer_route_dow_hour"}
         )
 
-    # 3. Route x IsDayOff x Hour profile
+    # 3. Recent window profile (last 56 days / 8 weeks before the forecast cut-off)
+    # For Sep-Oct val: this is July-August. For Nov-Dec final: this is Sep-Oct (autumn peak!).
+    max_dt = pd.to_datetime(train_df["date"]).max()
+    recent_cutoff = (max_dt - pd.Timedelta(days=56)).strftime("%Y-%m-%d")
+    recent_df = train_df[train_df["date"] >= recent_cutoff]
+
+    prof_route_dow_hour_recent = (
+        recent_df.groupby(["route", "dow_effective", "hour"])["boardings"]
+        .median()
+        .reset_index()
+        .rename(columns={"boardings": "hist_median_recent_route_dow_hour"})
+    )
+
+    # 4. Weekend outage detection (e.g. Route 50 track repairs):
+    recent_weekend = recent_df[recent_df["dow_effective"] >= 5]
+    weekend_med = recent_weekend.groupby("route")["boardings"].median()
+    closed_weekend_routes = [int(r) for r in weekend_med[weekend_med < 30].index.tolist() if r != 5]
+
+    # 5. Night zero threshold: hours where 95% of historical observations are 0
+    prof_night_q95 = (
+        train_df.groupby(["route", "hour"])["boardings"]
+        .quantile(0.95)
+        .reset_index()
+        .rename(columns={"boardings": "hist_q95_route_hour"})
+    )
+
+    # 6. Route x IsDayOff x Hour profile
     prof_route_dayoff_hour = (
         train_df.groupby(["route", "is_day_off", "hour"])["boardings"]
         .agg(["mean", "median"])
@@ -147,7 +174,7 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
         )
     )
 
-    # 4. Route x Hour overall profile
+    # 7. Route x Hour overall profile
     prof_route_hour = (
         train_df.groupby(["route", "hour"])["boardings"]
         .mean()
@@ -155,7 +182,7 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
         .rename(columns={"boardings": "hist_mean_route_hour"})
     )
 
-    # 5. Route overall volume
+    # 8. Route overall volume
     prof_route = (
         train_df.groupby("route")["boardings"]
         .mean()
@@ -166,9 +193,12 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
     return {
         "prof_route_dow_hour": prof_route_dow_hour,
         "prof_route_dow_hour_nonsummer": prof_route_dow_hour_nonsummer,
+        "prof_route_dow_hour_recent": prof_route_dow_hour_recent,
+        "prof_night_q95": prof_night_q95,
         "prof_route_dayoff_hour": prof_route_dayoff_hour,
         "prof_route_hour": prof_route_hour,
         "prof_route": prof_route,
+        "closed_weekend_routes": closed_weekend_routes,
     }
 
 
@@ -178,15 +208,45 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
 
     df = df.merge(profiles["prof_route_dow_hour"], on=["route", "dow_effective", "hour"], how="left")
     df = df.merge(profiles["prof_route_dow_hour_nonsummer"], on=["route", "dow_effective", "hour"], how="left")
+    df = df.merge(profiles["prof_route_dow_hour_recent"], on=["route", "dow_effective", "hour"], how="left")
+    df = df.merge(profiles["prof_night_q95"], on=["route", "hour"], how="left")
     df = df.merge(profiles["prof_route_dayoff_hour"], on=["route", "is_day_off", "hour"], how="left")
     df = df.merge(profiles["prof_route_hour"], on=["route", "hour"], how="left")
     df = df.merge(profiles["prof_route"], on=["route"], how="left")
 
-    # For route 5 (or unknown combinations), fill NaNs with 0
+    # If recent is missing, fallback to nonsummer
+    if "hist_median_recent_route_dow_hour" in df.columns:
+        df["hist_median_recent_route_dow_hour"] = df["hist_median_recent_route_dow_hour"].fillna(
+            df["hist_median_nonsummer_route_dow_hour"]
+        )
+
+    # Blended base profile: 70% recent + 30% long-term non-summer
+    # (Captures current capacity and fleet while maintaining long-term stability)
+    df["hist_median_blend_route_dow_hour"] = (
+        0.7 * df["hist_median_recent_route_dow_hour"] + 0.3 * df["hist_median_nonsummer_route_dow_hour"]
+    )
+
+    # For detected weekend closures (e.g. Route 50 repair):
+    closed_routes = profiles.get("closed_weekend_routes", [])
+    if closed_routes:
+        mask_closed = (df["route"].isin(closed_routes)) & (df["dow_effective"] >= 5)
+        df.loc[mask_closed, "hist_median_nonsummer_route_dow_hour"] = 0.0
+
+    # For nocturnal hours where 95% of observations are 0:
+    mask_night_zero = (df["hist_q95_route_hour"] == 0)
+    df.loc[mask_night_zero, "hist_median_nonsummer_route_dow_hour"] = 0.0
+
+    df["ratio_recent_to_nonsummer"] = (df["hist_median_recent_route_dow_hour"] + 1.0) / (
+        df["hist_median_nonsummer_route_dow_hour"] + 1.0
+    )
+
     stat_cols = [
         "hist_mean_route_dow_hour",
         "hist_median_route_dow_hour",
         "hist_median_nonsummer_route_dow_hour",
+        "hist_median_recent_route_dow_hour",
+        "ratio_recent_to_nonsummer",
+        "hist_q95_route_hour",
         "hist_std_route_dow_hour",
         "hist_mean_route_dayoff_hour",
         "hist_median_route_dayoff_hour",
@@ -291,6 +351,7 @@ def train_and_evaluate(
         "is_workday",
         "is_day_off",
         "is_summer",
+        "is_cold_season",
         "is_morning_peak",
         "is_evening_peak",
         "is_night",
@@ -301,6 +362,8 @@ def train_and_evaluate(
         "hist_mean_route_dow_hour",
         "hist_median_route_dow_hour",
         "hist_median_nonsummer_route_dow_hour",
+        "hist_median_recent_route_dow_hour",
+        "ratio_recent_to_nonsummer",
         "hist_std_route_dow_hour",
         "hist_mean_route_dayoff_hour",
         "hist_median_route_dayoff_hour",
@@ -310,7 +373,7 @@ def train_and_evaluate(
 
     cat_features = ["route", "hour", "dow_effective"]
 
-    # Base profile for residual learning: non-summer median (excludes summer vacation slump)
+    # Base profile for residual learning: non-summer median
     base_col = "hist_median_nonsummer_route_dow_hour"
     base_train = train_feat[base_col].values
     base_val = val_feat[base_col].values
