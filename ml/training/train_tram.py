@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -137,8 +138,9 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
 
     # 3. Recent window profile (last 56 days / 8 weeks before the forecast cut-off)
     # For Sep-Oct val: this is July-August. For Nov-Dec final: this is Sep-Oct (autumn peak!).
-    max_dt = pd.to_datetime(train_df["date"]).max()
-    recent_cutoff = (max_dt - pd.Timedelta(days=56)).strftime("%Y-%m-%d")
+    max_dt_str = str(train_df["date"].max())[:10]
+    max_dt = datetime.strptime(max_dt_str, "%Y-%m-%d")
+    recent_cutoff = (max_dt - timedelta(days=56)).strftime("%Y-%m-%d")
     recent_df = train_df[train_df["date"] >= recent_cutoff]
 
     prof_route_dow_hour_recent = (
@@ -429,6 +431,7 @@ def train_and_evaluate(
         }
         if use_gpu:
             cb_params["task_type"] = "GPU"
+            cb_params["metric_period"] = 5
         else:
             cb_params["task_type"] = "CPU"
             cb_params["thread_count"] = -1
