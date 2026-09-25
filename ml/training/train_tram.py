@@ -261,10 +261,11 @@ def train_and_evaluate(
     output_dir: Path,
     use_gpu: bool = True,
     model_type: str = "catboost",
-    iterations: int = 1500,
-    learning_rate: float = 0.05,
-    depth: int = 7,
+    iterations: int = 2000,
+    learning_rate: float = 0.04,
+    depth: int = 6,
     use_residual: bool = True,
+    per_route: bool = True,
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -328,6 +329,11 @@ def train_and_evaluate(
         y_val_fit = y_val
 
     model = None
+    route_models = {}
+    active_routes = [r for r in ALL_ROUTES if r != 5]
+    route_feat_cols = [c for c in feature_cols if c != "route"]
+    route_cat_features = [c for c in cat_features if c != "route"]
+
     if model_type == "catboost":
         try:
             from catboost import CatBoostRegressor
@@ -341,28 +347,58 @@ def train_and_evaluate(
             "learning_rate": learning_rate,
             "depth": depth,
             "random_seed": 42,
-            "verbose": 200,
-            "cat_features": cat_features,
+            "verbose": 0 if per_route else 200,
+            "cat_features": route_cat_features if per_route else cat_features,
         }
-
         if use_gpu:
-            print("Attempting to initialize CatBoost with NVIDIA GPU (task_type='GPU')...")
-            try:
-                cb_params["task_type"] = "GPU"
-                model = CatBoostRegressor(**cb_params)
-                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
-                print("GPU training successful!")
-            except Exception as e:
-                print(f"GPU initialization failed ({e}). Falling back to multi-threaded CPU...")
-                cb_params["task_type"] = "CPU"
-                cb_params["thread_count"] = -1
-                model = CatBoostRegressor(**cb_params)
-                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+            cb_params["task_type"] = "GPU"
         else:
             cb_params["task_type"] = "CPU"
             cb_params["thread_count"] = -1
-            model = CatBoostRegressor(**cb_params)
-            model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+
+        if per_route:
+            print("Training 9 specialized per-route CatBoost models...")
+            val_preds = np.zeros(len(val_feat))
+            for r in active_routes:
+                mask_tr = (train_feat["route"] == r)
+                mask_val = (val_feat["route"] == r)
+                X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
+                y_tr_r = y_train_fit[mask_tr]
+                X_val_r = val_feat.loc[mask_val, route_feat_cols]
+                y_val_r = y_val_fit[mask_val]
+
+                m_r = CatBoostRegressor(**cb_params)
+                try:
+                    m_r.fit(X_tr_r, y_tr_r, eval_set=(X_val_r, y_val_r), early_stopping_rounds=150, verbose=0)
+                except Exception as e:
+                    # fallback to CPU if GPU fails for small route
+                    cb_params_cpu = cb_params.copy()
+                    cb_params_cpu["task_type"] = "CPU"
+                    cb_params_cpu["thread_count"] = -1
+                    m_r = CatBoostRegressor(**cb_params_cpu)
+                    m_r.fit(X_tr_r, y_tr_r, eval_set=(X_val_r, y_val_r), early_stopping_rounds=150, verbose=0)
+
+                raw_preds_r = m_r.predict(X_val_r)
+                if use_residual:
+                    val_preds[mask_val] = base_val[mask_val] + raw_preds_r
+                else:
+                    val_preds[mask_val] = raw_preds_r
+                route_models[r] = m_r
+                r_wape = compute_wape_metrics(y_val[mask_val], val_preds[mask_val])
+                print(f"  Route {r:2d} finished: best_iter={m_r.get_best_iteration():4d}, WAPE={r_wape['wape']:.4f}, WAPE-score={r_wape['wape_score']:.4f}")
+        else:
+            if use_gpu:
+                try:
+                    model = CatBoostRegressor(**cb_params)
+                    model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+                except Exception as e:
+                    cb_params["task_type"] = "CPU"
+                    cb_params["thread_count"] = -1
+                    model = CatBoostRegressor(**cb_params)
+                    model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+            else:
+                model = CatBoostRegressor(**cb_params)
+                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
 
     elif model_type == "lightgbm":
         try:
@@ -381,16 +417,44 @@ def train_and_evaluate(
         if use_gpu:
             lgb_params["device"] = "gpu"
 
-        dtrain = lgb.Dataset(X_train, label=y_train_fit, categorical_feature=cat_features)
-        dval = lgb.Dataset(X_val, label=y_val_fit, reference=dtrain, categorical_feature=cat_features)
+        if per_route:
+            print("Training 9 specialized per-route LightGBM models...")
+            val_preds = np.zeros(len(val_feat))
+            for r in active_routes:
+                mask_tr = (train_feat["route"] == r)
+                mask_val = (val_feat["route"] == r)
+                X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
+                y_tr_r = y_train_fit[mask_tr]
+                X_val_r = val_feat.loc[mask_val, route_feat_cols]
+                y_val_r = y_val_fit[mask_val]
 
-        model = lgb.train(
-            lgb_params,
-            dtrain,
-            num_boost_round=iterations,
-            valid_sets=[dtrain, dval],
-            callbacks=[lgb.early_stopping(stopping_rounds=100), lgb.log_evaluation(period=200)],
-        )
+                dtrain = lgb.Dataset(X_tr_r, label=y_tr_r, categorical_feature=route_cat_features)
+                dval = lgb.Dataset(X_val_r, label=y_val_r, reference=dtrain, categorical_feature=route_cat_features)
+
+                m_r = lgb.train(
+                    lgb_params,
+                    dtrain,
+                    num_boost_round=iterations,
+                    valid_sets=[dtrain, dval],
+                    callbacks=[lgb.early_stopping(stopping_rounds=100, verbose=False)],
+                )
+                raw_preds_r = m_r.predict(X_val_r)
+                if use_residual:
+                    val_preds[mask_val] = base_val[mask_val] + raw_preds_r
+                else:
+                    val_preds[mask_val] = raw_preds_r
+                route_models[r] = m_r
+        else:
+            dtrain = lgb.Dataset(X_train, label=y_train_fit, categorical_feature=cat_features)
+            dval = lgb.Dataset(X_val, label=y_val_fit, reference=dtrain, categorical_feature=cat_features)
+
+            model = lgb.train(
+                lgb_params,
+                dtrain,
+                num_boost_round=iterations,
+                valid_sets=[dtrain, dval],
+                callbacks=[lgb.early_stopping(stopping_rounds=100), lgb.log_evaluation(period=200)],
+            )
 
     elif model_type == "baseline":
         print("Using historical seasonal profile baseline (pure numpy/pandas)...")
@@ -412,7 +476,7 @@ def train_and_evaluate(
     # Evaluate validation predictions
     if model_type == "baseline":
         val_preds = base_val
-    else:
+    elif not per_route:
         raw_val_preds = model.predict(X_val)
         if use_residual:
             val_preds = base_val + raw_val_preds
@@ -461,9 +525,50 @@ def train_and_evaluate(
         y_full_fit = y_full
 
     final_model = None
+    sub_preds = np.zeros(len(sub_feat), dtype=int)
+
     if model_type == "baseline":
         print("Using historical seasonal profile baseline for final submission...")
         sub_preds = base_sub
+    elif per_route and model_type == "catboost":
+        print("Fitting final per-route CatBoost models on full Jan-Oct history...")
+        for r in active_routes:
+            mask_full = (full_train_feat["route"] == r)
+            mask_sub = (sub_feat["route"] == r)
+            X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
+            y_full_r = y_full_fit[mask_full]
+            X_sub_r = sub_feat.loc[mask_sub, route_feat_cols]
+
+            best_iter = route_models[r].get_best_iteration() or iterations
+            final_cb_params = cb_params.copy()
+            final_cb_params["iterations"] = max(best_iter, 300)
+            final_m_r = CatBoostRegressor(**final_cb_params)
+            try:
+                final_m_r.fit(X_full_r, y_full_r, verbose=0)
+            except Exception:
+                final_cb_params["task_type"] = "CPU"
+                final_cb_params["thread_count"] = -1
+                final_m_r = CatBoostRegressor(**final_cb_params)
+                final_m_r.fit(X_full_r, y_full_r, verbose=0)
+
+            raw_sub_r = final_m_r.predict(X_sub_r)
+            sub_pred_r = (base_sub[mask_sub] + raw_sub_r) if use_residual else raw_sub_r
+            sub_preds[mask_sub] = np.clip(np.round(sub_pred_r), 0, None).astype(int)
+    elif per_route and model_type == "lightgbm":
+        print("Fitting final per-route LightGBM models on full Jan-Oct history...")
+        for r in active_routes:
+            mask_full = (full_train_feat["route"] == r)
+            mask_sub = (sub_feat["route"] == r)
+            X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
+            y_full_r = y_full_fit[mask_full]
+            X_sub_r = sub_feat.loc[mask_sub, route_feat_cols]
+
+            best_iter = route_models[r].best_iteration or iterations
+            d_full_r = lgb.Dataset(X_full_r, label=y_full_r, categorical_feature=route_cat_features)
+            final_m_r = lgb.train(lgb_params, d_full_r, num_boost_round=best_iter)
+            raw_sub_r = final_m_r.predict(X_sub_r)
+            sub_pred_r = (base_sub[mask_sub] + raw_sub_r) if use_residual else raw_sub_r
+            sub_preds[mask_sub] = np.clip(np.round(sub_pred_r), 0, None).astype(int)
     elif model_type == "catboost":
         final_iterations = model.get_best_iteration() or iterations
         print(f"Training final CatBoost model on full data ({final_iterations} iterations)...")
@@ -552,25 +657,30 @@ def main():
     parser.add_argument(
         "--iterations",
         type=int,
-        default=1500,
-        help="Number of boosting iterations (default: 1500)",
+        default=2000,
+        help="Number of boosting iterations (default: 2000)",
     )
     parser.add_argument(
         "--learning-rate",
         type=float,
-        default=0.06,
-        help="Learning rate (default: 0.06)",
+        default=0.04,
+        help="Learning rate (default: 0.04)",
     )
     parser.add_argument(
         "--depth",
         type=int,
-        default=7,
-        help="Tree depth (default: 7)",
+        default=6,
+        help="Tree depth (default: 6)",
     )
     parser.add_argument(
         "--no-residual",
         action="store_true",
         help="Train directly on raw boardings rather than residual (delta) from base profile",
+    )
+    parser.add_argument(
+        "--no-per-route",
+        action="store_true",
+        help="Train one single model for all routes instead of 9 dedicated per-route models",
     )
 
     args = parser.parse_args()
@@ -583,6 +693,7 @@ def main():
         learning_rate=args.learning_rate,
         depth=args.depth,
         use_residual=not args.no_residual,
+        per_route=not args.no_per_route,
     )
 
 
