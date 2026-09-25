@@ -13,4 +13,5 @@
 | Файл | Назначение |
 |---|---|
 | [check_docs.py](check_docs.py) | Проверка локальных Markdown-ссылок и наличия назначения каждого файла в README своей папки. |
+| [download_sources.py](download_sources.py) | Скачивание открытых API (погода, события) и импорт выгрузок data.mos.ru с формированием provenance.json. |
 | [start-component.ps1](start-component.ps1) | Запуск одного локального компонента в текущем терминале с правильным рабочим каталогом. |
