@@ -75,23 +75,25 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df["dayofweek"] = dt.dt.dayofweek
     df["month"] = dt.dt.month
-    df["day"] = dt.dt.day
-    df["dayofyear"] = dt.dt.dayofyear
     df["is_weekend"] = (df["dayofweek"] >= 5).astype(int)
 
     df["is_holiday"] = df["date"].isin(HOLIDAYS_2025).astype(int)
     df["is_preholiday"] = df["date"].isin(PRE_HOLIDAYS_2025).astype(int)
     df["is_workday"] = ((df["is_weekend"] == 0) & (df["is_holiday"] == 0)).astype(int)
-    # Special: weekend day that operates as workday
     df["is_day_off"] = ((df["is_weekend"] == 1) | (df["is_holiday"] == 1)).astype(int)
+    df["is_summer"] = df["month"].isin([6, 7, 8]).astype(int)
 
-    # Cyclical encodings
+    # In transport systems, public holidays operate on Sunday schedule (dow=6),
+    # and working Saturdays (pre-holidays) operate on Friday schedule (dow=4).
+    df["dow_effective"] = df["dayofweek"]
+    df.loc[df["is_holiday"] == 1, "dow_effective"] = 6
+    df.loc[(df["is_preholiday"] == 1) & (df["is_weekend"] == 1), "dow_effective"] = 4
+
+    # Cyclical encodings (safe for tree extrapolation)
     df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
     df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-    df["dow_sin"] = np.sin(2 * np.pi * df["dayofweek"] / 7)
-    df["dow_cos"] = np.cos(2 * np.pi * df["dayofweek"] / 7)
-    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+    df["dow_sin"] = np.sin(2 * np.pi * df["dow_effective"] / 7)
+    df["dow_cos"] = np.cos(2 * np.pi * df["dow_effective"] / 7)
 
     # Peak hour indicators
     df["is_morning_peak"] = df["hour"].isin([7, 8, 9]).astype(int) * df["is_workday"]
@@ -103,9 +105,9 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Calculate historical passenger profiles on train data only (no data leakage)."""
-    # 1. Route x DayOfWeek x Hour profile
+    # 1. Route x dow_effective x Hour profile (holidays automatically use Sunday schedule)
     prof_route_dow_hour = (
-        train_df.groupby(["route", "dayofweek", "hour"])["boardings"]
+        train_df.groupby(["route", "dow_effective", "hour"])["boardings"]
         .agg(["mean", "median", "std"])
         .reset_index()
         .rename(
@@ -117,7 +119,22 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
         )
     )
 
-    # 2. Route x IsDayOff x Hour profile (crucial for holidays)
+    # 2. Non-summer profile (normal work period: excludes June, July, August vacation slump)
+    # This gives a much more accurate baseline for autumn (Sep-Oct) and winter (Nov-Dec).
+    nonsummer_df = train_df[train_df["is_summer"] == 0]
+    if len(nonsummer_df) > 0:
+        prof_route_dow_hour_nonsummer = (
+            nonsummer_df.groupby(["route", "dow_effective", "hour"])["boardings"]
+            .median()
+            .reset_index()
+            .rename(columns={"boardings": "hist_median_nonsummer_route_dow_hour"})
+        )
+    else:
+        prof_route_dow_hour_nonsummer = prof_route_dow_hour[["route", "dow_effective", "hour", "hist_median_route_dow_hour"]].rename(
+            columns={"hist_median_route_dow_hour": "hist_median_nonsummer_route_dow_hour"}
+        )
+
+    # 3. Route x IsDayOff x Hour profile
     prof_route_dayoff_hour = (
         train_df.groupby(["route", "is_day_off", "hour"])["boardings"]
         .agg(["mean", "median"])
@@ -130,7 +147,7 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
         )
     )
 
-    # 3. Route x Hour overall profile
+    # 4. Route x Hour overall profile
     prof_route_hour = (
         train_df.groupby(["route", "hour"])["boardings"]
         .mean()
@@ -138,7 +155,7 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
         .rename(columns={"boardings": "hist_mean_route_hour"})
     )
 
-    # 4. Route overall volume
+    # 5. Route overall volume
     prof_route = (
         train_df.groupby("route")["boardings"]
         .mean()
@@ -148,6 +165,7 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
 
     return {
         "prof_route_dow_hour": prof_route_dow_hour,
+        "prof_route_dow_hour_nonsummer": prof_route_dow_hour_nonsummer,
         "prof_route_dayoff_hour": prof_route_dayoff_hour,
         "prof_route_hour": prof_route_hour,
         "prof_route": prof_route,
@@ -158,7 +176,8 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
     """Attach computed historical profiles to any dataset (train, val, or test)."""
     df = df.copy()
 
-    df = df.merge(profiles["prof_route_dow_hour"], on=["route", "dayofweek", "hour"], how="left")
+    df = df.merge(profiles["prof_route_dow_hour"], on=["route", "dow_effective", "hour"], how="left")
+    df = df.merge(profiles["prof_route_dow_hour_nonsummer"], on=["route", "dow_effective", "hour"], how="left")
     df = df.merge(profiles["prof_route_dayoff_hour"], on=["route", "is_day_off", "hour"], how="left")
     df = df.merge(profiles["prof_route_hour"], on=["route", "hour"], how="left")
     df = df.merge(profiles["prof_route"], on=["route"], how="left")
@@ -167,6 +186,7 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
     stat_cols = [
         "hist_mean_route_dow_hour",
         "hist_median_route_dow_hour",
+        "hist_median_nonsummer_route_dow_hour",
         "hist_std_route_dow_hour",
         "hist_mean_route_dayoff_hour",
         "hist_median_route_dayoff_hour",
@@ -244,6 +264,7 @@ def train_and_evaluate(
     iterations: int = 1500,
     learning_rate: float = 0.05,
     depth: int = 7,
+    use_residual: bool = True,
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -262,15 +283,13 @@ def train_and_evaluate(
     feature_cols = [
         "route",
         "hour",
-        "dayofweek",
-        "month",
-        "day",
-        "dayofyear",
+        "dow_effective",
         "is_weekend",
         "is_holiday",
         "is_preholiday",
         "is_workday",
         "is_day_off",
+        "is_summer",
         "is_morning_peak",
         "is_evening_peak",
         "is_night",
@@ -278,10 +297,9 @@ def train_and_evaluate(
         "hour_cos",
         "dow_sin",
         "dow_cos",
-        "month_sin",
-        "month_cos",
         "hist_mean_route_dow_hour",
         "hist_median_route_dow_hour",
+        "hist_median_nonsummer_route_dow_hour",
         "hist_std_route_dow_hour",
         "hist_mean_route_dayoff_hour",
         "hist_median_route_dayoff_hour",
@@ -289,12 +307,25 @@ def train_and_evaluate(
         "hist_mean_route",
     ]
 
-    cat_features = ["route", "hour", "dayofweek"]
+    cat_features = ["route", "hour", "dow_effective"]
+
+    # Base profile for residual learning: non-summer median (excludes summer vacation slump)
+    base_col = "hist_median_nonsummer_route_dow_hour"
+    base_train = train_feat[base_col].values
+    base_val = val_feat[base_col].values
 
     X_train = train_feat[feature_cols]
     y_train = train_feat["boardings"].values
     X_val = val_feat[feature_cols]
     y_val = val_feat["boardings"].values
+
+    if use_residual:
+        print("Using Residual Learning (target = boardings - base_profile)...")
+        y_train_fit = y_train - base_train
+        y_val_fit = y_val - base_val
+    else:
+        y_train_fit = y_train
+        y_val_fit = y_val
 
     model = None
     if model_type == "catboost":
@@ -317,22 +348,21 @@ def train_and_evaluate(
         if use_gpu:
             print("Attempting to initialize CatBoost with NVIDIA GPU (task_type='GPU')...")
             try:
-                # Test GPU availability
                 cb_params["task_type"] = "GPU"
                 model = CatBoostRegressor(**cb_params)
-                model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=100, verbose=200)
+                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
                 print("GPU training successful!")
             except Exception as e:
                 print(f"GPU initialization failed ({e}). Falling back to multi-threaded CPU...")
                 cb_params["task_type"] = "CPU"
                 cb_params["thread_count"] = -1
                 model = CatBoostRegressor(**cb_params)
-                model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=100, verbose=200)
+                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
         else:
             cb_params["task_type"] = "CPU"
             cb_params["thread_count"] = -1
             model = CatBoostRegressor(**cb_params)
-            model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=100, verbose=200)
+            model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
 
     elif model_type == "lightgbm":
         try:
@@ -351,8 +381,8 @@ def train_and_evaluate(
         if use_gpu:
             lgb_params["device"] = "gpu"
 
-        dtrain = lgb.Dataset(X_train, label=y_train, categorical_feature=cat_features)
-        dval = lgb.Dataset(X_val, label=y_val, reference=dtrain, categorical_feature=cat_features)
+        dtrain = lgb.Dataset(X_train, label=y_train_fit, categorical_feature=cat_features)
+        dval = lgb.Dataset(X_val, label=y_val_fit, reference=dtrain, categorical_feature=cat_features)
 
         model = lgb.train(
             lgb_params,
@@ -364,8 +394,6 @@ def train_and_evaluate(
 
     elif model_type == "baseline":
         print("Using historical seasonal profile baseline (pure numpy/pandas)...")
-        # Predict directly from the historical profile hist_median_route_dow_hour
-        val_preds = val_feat["hist_median_route_dow_hour"].values
 
     elif model_type == "histgradient":
         from sklearn.ensemble import HistGradientBoostingRegressor
@@ -379,11 +407,18 @@ def train_and_evaluate(
             categorical_features=cat_indices,
             random_state=42,
         )
-        model.fit(X_train, y_train)
+        model.fit(X_train, y_train_fit)
 
     # Evaluate validation predictions
-    if model_type != "baseline":
-        val_preds = model.predict(X_val)
+    if model_type == "baseline":
+        val_preds = base_val
+    else:
+        raw_val_preds = model.predict(X_val)
+        if use_residual:
+            val_preds = base_val + raw_val_preds
+        else:
+            val_preds = raw_val_preds
+
     val_preds = np.clip(np.round(val_preds), 0, None)
     # Force route 5 to 0
     val_preds[X_val["route"] == 5] = 0
@@ -413,28 +448,38 @@ def train_and_evaluate(
     full_train_feat = attach_historical_profiles(full_train, profiles_full)
     sub_feat = attach_historical_profiles(grid_sub, profiles_full)
 
+    base_full = full_train_feat[base_col].values
+    base_sub = sub_feat[base_col].values
+
     X_full = full_train_feat[feature_cols]
     y_full = full_train_feat["boardings"].values
     X_sub = sub_feat[feature_cols]
 
+    if use_residual:
+        y_full_fit = y_full - base_full
+    else:
+        y_full_fit = y_full
+
     final_model = None
     if model_type == "baseline":
         print("Using historical seasonal profile baseline for final submission...")
-        sub_preds = sub_feat["hist_median_route_dow_hour"].values
+        sub_preds = base_sub
     elif model_type == "catboost":
         final_iterations = model.get_best_iteration() or iterations
         print(f"Training final CatBoost model on full data ({final_iterations} iterations)...")
         final_params = cb_params.copy()
         final_params["iterations"] = max(final_iterations, 300)
         final_model = CatBoostRegressor(**final_params)
-        final_model.fit(X_full, y_full, verbose=200)
-        sub_preds = final_model.predict(X_sub)
+        final_model.fit(X_full, y_full_fit, verbose=200)
+        raw_sub = final_model.predict(X_sub)
+        sub_preds = (base_sub + raw_sub) if use_residual else raw_sub
     elif model_type == "lightgbm":
         final_iterations = model.best_iteration or iterations
         print(f"Training final LightGBM model on full data ({final_iterations} iterations)...")
-        d_full = lgb.Dataset(X_full, label=y_full, categorical_feature=cat_features)
+        d_full = lgb.Dataset(X_full, label=y_full_fit, categorical_feature=cat_features)
         final_model = lgb.train(lgb_params, d_full, num_boost_round=final_iterations)
-        sub_preds = final_model.predict(X_sub)
+        raw_sub = final_model.predict(X_sub)
+        sub_preds = (base_sub + raw_sub) if use_residual else raw_sub
     elif model_type == "histgradient":
         from sklearn.ensemble import HistGradientBoostingRegressor
         print("Training final Sklearn HistGradientBoostingRegressor on full data...")
@@ -447,8 +492,9 @@ def train_and_evaluate(
             categorical_features=cat_indices,
             random_state=42,
         )
-        final_model.fit(X_full, y_full)
-        sub_preds = final_model.predict(X_sub)
+        final_model.fit(X_full, y_full_fit)
+        raw_sub = final_model.predict(X_sub)
+        sub_preds = (base_sub + raw_sub) if use_residual else raw_sub
 
     # Step 3: Predict November - December 2025
     print("\nGenerating predictions for November - December 2025...")
@@ -521,6 +567,11 @@ def main():
         default=7,
         help="Tree depth (default: 7)",
     )
+    parser.add_argument(
+        "--no-residual",
+        action="store_true",
+        help="Train directly on raw boardings rather than residual (delta) from base profile",
+    )
 
     args = parser.parse_args()
     train_and_evaluate(
@@ -531,6 +582,7 @@ def main():
         iterations=args.iterations,
         learning_rate=args.learning_rate,
         depth=args.depth,
+        use_residual=not args.no_residual,
     )
 
 
