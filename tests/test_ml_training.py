@@ -40,6 +40,7 @@ def test_feature_extraction_has_no_future_leakage():
     # 2021-Q1 has no past lags
     q1 = features[0]
     assert q1["quarter"] == "2021-Q1"
+    assert q1["quarter_num"] == 1
     assert q1["lag_1"] is None
     assert q1["lag_4"] is None
     assert q1["target"] == 100.0

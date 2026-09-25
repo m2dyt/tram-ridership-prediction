@@ -110,7 +110,7 @@ def extract_features(
                 "line": line,
                 "quarter": str(q),
                 "year": q.year,
-                "quarter_num": q.quarter,
+                "quarter_num": q.number,
                 "entrances_count": num_entrances,
                 "lag_1": lag_1,
                 "lag_2": lag_2,
