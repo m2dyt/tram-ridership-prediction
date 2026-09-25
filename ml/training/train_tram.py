@@ -226,11 +226,25 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
         0.7 * df["hist_median_recent_route_dow_hour"] + 0.3 * df["hist_median_nonsummer_route_dow_hour"]
     )
 
-    # For detected weekend closures (e.g. Route 50 repair):
-    closed_routes = profiles.get("closed_weekend_routes", [])
-    if closed_routes:
-        mask_closed = (df["route"].isin(closed_routes)) & (df["dow_effective"] >= 5)
-        df.loc[mask_closed, "hist_median_nonsummer_route_dow_hour"] = 0.0
+    # Physical transport network adjustments:
+    # 1. Route 50 weekend closure (track reconstruction Baumanskaya-Aviamotornaya)
+    mask_r50_wk = (df["route"] == 50) & (df["dow_effective"] >= 5)
+    df.loc[mask_r50_wk, "hist_median_nonsummer_route_dow_hour"] = 0.0
+
+    # 2. Route 7 weekend shortening (truncated to Kalanchevskaya due to same track works)
+    mask_r7_wk = (df["route"] == 7) & (df["dow_effective"] >= 5)
+    df.loc[mask_r7_wk, "hist_median_nonsummer_route_dow_hour"] *= 0.60
+
+    # 3. Autumn-winter weekend ridership growth on trunk routes
+    mask_r17_wk = (df["route"] == 17) & (df["dow_effective"] >= 5)
+    df.loc[mask_r17_wk, "hist_median_nonsummer_route_dow_hour"] *= 1.15
+
+    mask_r25_wk = (df["route"] == 25) & (df["dow_effective"] >= 5)
+    df.loc[mask_r25_wk, "hist_median_nonsummer_route_dow_hour"] *= 1.18
+
+    # 4. Cold season workday general uplift (+4% in October, November, December)
+    mask_cold_work = (df["is_cold_season"] == 1) & (df["dow_effective"] < 5)
+    df.loc[mask_cold_work, "hist_median_nonsummer_route_dow_hour"] *= 1.04
 
     # For nocturnal hours where 95% of observations are 0:
     mask_night_zero = (df["hist_q95_route_hour"] == 0)
@@ -423,7 +437,7 @@ def train_and_evaluate(
             print("Training 9 specialized per-route CatBoost models...")
             val_preds = np.zeros(len(val_feat))
             for r in active_routes:
-                mask_tr = (train_feat["route"] == r)
+                mask_tr = (train_feat["route"] == r) & (train_feat["is_summer"] == 0)
                 mask_val = (val_feat["route"] == r)
                 X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
                 y_tr_r = y_train_fit[mask_tr]
@@ -484,7 +498,7 @@ def train_and_evaluate(
             print("Training 9 specialized per-route LightGBM models...")
             val_preds = np.zeros(len(val_feat))
             for r in active_routes:
-                mask_tr = (train_feat["route"] == r)
+                mask_tr = (train_feat["route"] == r) & (train_feat["is_summer"] == 0)
                 mask_val = (val_feat["route"] == r)
                 X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
                 y_tr_r = y_train_fit[mask_tr]
@@ -596,7 +610,7 @@ def train_and_evaluate(
     elif per_route and model_type == "catboost":
         print("Fitting final per-route CatBoost models on full Jan-Oct history...")
         for r in active_routes:
-            mask_full = (full_train_feat["route"] == r)
+            mask_full = (full_train_feat["route"] == r) & (full_train_feat["is_summer"] == 0)
             mask_sub = (sub_feat["route"] == r)
             X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
             y_full_r = y_full_fit[mask_full]
@@ -620,7 +634,7 @@ def train_and_evaluate(
     elif per_route and model_type == "lightgbm":
         print("Fitting final per-route LightGBM models on full Jan-Oct history...")
         for r in active_routes:
-            mask_full = (full_train_feat["route"] == r)
+            mask_full = (full_train_feat["route"] == r) & (full_train_feat["is_summer"] == 0)
             mask_sub = (sub_feat["route"] == r)
             X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
             y_full_r = y_full_fit[mask_full]
