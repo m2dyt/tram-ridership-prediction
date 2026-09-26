@@ -22,3 +22,4 @@ logs/
 .idea/
 .vscode/
 dataset/
+catboost_info/
