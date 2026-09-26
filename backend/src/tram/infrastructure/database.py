@@ -202,6 +202,30 @@ class SourceSnapshotRow(Base):
     document: Mapped[dict] = mapped_column(JSON_TYPE)
 
 
+class UserRow(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(256))
+    role: Mapped[str] = mapped_column(String(32))
+    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(Timestamp())
+    __table_args__ = (
+        CheckConstraint("role IN ('viewer','operator')", name="user_role"),
+    )
+
+
+class RefreshTokenRow(Base):
+    __tablename__ = "refresh_tokens"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    token_hash: Mapped[str] = mapped_column(String(256), unique=True, index=True)
+    issued_at: Mapped[datetime] = mapped_column(Timestamp())
+    expires_at: Mapped[datetime] = mapped_column(Timestamp())
+    revoked_at: Mapped[datetime | None] = mapped_column(Timestamp())
+    replaced_by: Mapped[str | None] = mapped_column(ForeignKey("refresh_tokens.id"))
+
+
 def make_engine(url: str):
     options = (
         {"connect_args": {"check_same_thread": False}}

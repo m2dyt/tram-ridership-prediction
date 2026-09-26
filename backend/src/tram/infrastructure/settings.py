@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     viewer_token: SecretStr = SecretStr("")
     operator_token: SecretStr = SecretStr("")
     cursor_secret: SecretStr = SecretStr("")
+    auth_token_secret: SecretStr = SecretStr("")
     weatherapi_key: SecretStr = SecretStr("")
     timepad_token: SecretStr = SecretStr("")
     openapi_path: Path = Path("openapi.yaml")
@@ -23,6 +24,9 @@ class Settings(BaseSettings):
     lease_seconds: int = Field(default=120, ge=30, le=3600)
     max_attempts: int = Field(default=3, ge=1, le=10)
     poll_seconds: float = Field(default=2, ge=0.1, le=60)
+    access_token_ttl_seconds: int = 900
+    refresh_token_ttl_seconds: int = 30 * 86400
+    allow_static_tokens: bool = True
 
     @model_validator(mode="after")
     def supported_database(self):
@@ -37,8 +41,9 @@ class Settings(BaseSettings):
             self.viewer_token.get_secret_value(),
             self.operator_token.get_secret_value(),
             self.cursor_secret.get_secret_value(),
+            self.auth_token_secret.get_secret_value(),
         ]
-        if any(len(value) < 32 for value in values) or len(set(values)) != 3:
+        if any(len(value) < 32 for value in values) or len(set(values)) != 4:
             raise ValueError(
-                "Set three different TRAM_VIEWER_TOKEN, TRAM_OPERATOR_TOKEN and TRAM_CURSOR_SECRET values of at least 32 characters"
+                "Set four different TRAM_VIEWER_TOKEN, TRAM_OPERATOR_TOKEN, TRAM_CURSOR_SECRET and TRAM_AUTH_TOKEN_SECRET values of at least 32 characters"
             )
