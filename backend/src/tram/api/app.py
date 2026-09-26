@@ -47,6 +47,7 @@ def create_http_app(
     unavailable_errors=(),
     extra_reads=None,
     extra_commands=None,
+    auth_service=None,
 ):
     app = FastAPI(title=contract.document["info"]["title"], lifespan=lifespan)
     app.openapi = lambda: contract.document
@@ -115,13 +116,26 @@ def create_http_app(
         if len(values) != 1:
             raise ApplicationError("UNAUTHORIZED", "Bearer token is required")
         parts = values[0].split()
-        token = parts[1].encode() if len(parts) == 2 and parts[0].lower() == "bearer" else b""
-        operator = hmac.compare_digest(token, operator_token.encode())
-        viewer = hmac.compare_digest(token, viewer_token.encode())
+        token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else ""
+        token_b = token.encode()
+        operator = hmac.compare_digest(token_b, operator_token.encode()) if operator_token else False
+        viewer = hmac.compare_digest(token_b, viewer_token.encode()) if viewer_token else False
+        
+        jwt_user = None
+        if not (operator or viewer) and auth_service:
+            jwt_user = auth_service.issuer.verify_access_token(token, reads.clock.now())
+            if jwt_user:
+                if jwt_user["role"] == "operator":
+                    operator = True
+                elif jwt_user["role"] == "viewer":
+                    viewer = True
+
         if not (operator or viewer):
             raise ApplicationError("UNAUTHORIZED", "Invalid bearer token")
         if request.method == "POST" and not operator:
             raise ApplicationError("FORBIDDEN", "Operator role is required")
+            
+        request.state.user = jwt_user or {"user_id": "static", "role": "operator" if operator else "viewer"}
 
     def parameters(request, operation):
         query, headers = {}, {}
@@ -136,9 +150,21 @@ def create_http_app(
                 "header": request.headers,
                 "path": request.path_params,
             }[location]
-            if hasattr(source, "getlist") and len(source.getlist(name)) > 1:
-                raise ApplicationError("VALIDATION_ERROR", "Parameter must occur once", name)
-            value = source.get(name, schema.get("default"))
+            
+            if schema.get("type") == "array":
+                value = source.getlist(name) if hasattr(source, "getlist") else source.get(name)
+                if not value and schema.get("default") is not None:
+                    value = schema.get("default")
+            else:
+                if hasattr(source, "getlist") and len(source.getlist(name)) > 1:
+                    raise ApplicationError("VALIDATION_ERROR", "Parameter must occur once", name)
+                value = source.get(name, schema.get("default"))
+                
+            if value is None or (schema.get("type") == "array" and not value):
+                # If array is empty, we treat it as missing if required
+                if not value and schema.get("type") == "array":
+                    value = None
+                
             if value is None:
                 if parameter.get("required"):
                     raise ApplicationError(
@@ -173,6 +199,7 @@ def create_http_app(
 
     handlers = {
         "getHealth": lambda p, q: health(),
+        "getNetwork": lambda p, q: reads.network(q["network_revision_id"]),
         "getCapabilities": lambda p, q: reads.capabilities(q),
         "getDataStatus": lambda p, q: reads.data_status(),
         "listRoutes": lambda p, q: reads.routes(q),
@@ -210,7 +237,7 @@ def create_http_app(
                     if len(body) > 65536:
                         raise ApplicationError("BAD_REQUEST", "Request body exceeds 64 KiB")
                 try:
-                    command = strict_json(body)
+                    command = strict_json(body) if body else {}
                     schema = operation["requestBody"]["content"]["application/json"]["schema"]
                     contract.validator(schema).validate(command)
                 except (ValueError, UnicodeDecodeError, RecursionError) as exc:
@@ -222,9 +249,12 @@ def create_http_app(
                         ".".join(str(p) for p in exc.path) or "body",
                     ) from exc
                 if operation["operationId"] in commands:
-                    return await run_in_threadpool(
-                        commands[operation["operationId"]], request.path_params, command
-                    )
+                    import inspect
+                    func = commands[operation["operationId"]]
+                    sig = inspect.signature(func)
+                    if len(sig.parameters) == 3:
+                        return await run_in_threadpool(func, request.path_params, command, request)
+                    return await run_in_threadpool(func, request.path_params, command)
                 run, created = await run_in_threadpool(
                     forecasts.create, command, "operator", headers["Idempotency-Key"]
                 )
@@ -233,9 +263,15 @@ def create_http_app(
                     status_code=202 if created else 200,
                     headers={"Location": f"/api/v1/forecast-runs/{run['id']}", "Retry-After": "2"},
                 )
-            result = await run_in_threadpool(
-                handlers[operation["operationId"]], request.path_params, query
-            )
+            
+            import inspect
+            func = handlers[operation["operationId"]]
+            sig = inspect.signature(func)
+            if len(sig.parameters) == 3:
+                result = await run_in_threadpool(func, request.path_params, query, request)
+            else:
+                result = await run_in_threadpool(func, request.path_params, query)
+                
             if operation["operationId"] == "getForecastRun" and result["status"] in (
                 "queued",
                 "running",

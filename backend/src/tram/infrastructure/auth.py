@@ -75,6 +75,15 @@ class JwtTokenIssuer:
         # now + timedelta can be computed, but we return datetime from the timestamp to avoid microsecond issues
         return token, datetime.fromtimestamp(expires_at, tz=UTC)
 
+    def verify_access_token(self, token: str, now: datetime) -> Document | None:
+        try:
+            payload = jwt.decode(token, self.secret, algorithms=["HS256"], options={"verify_exp": False})
+            if payload.get("exp", 0) < now.timestamp():
+                return None
+            return {"user_id": payload.get("sub"), "role": payload.get("role")}
+        except (jwt.InvalidTokenError, jwt.ExpiredSignatureError):
+            return None
+
 
 class SqlSessionStore:
     def __init__(self, session_factory):
@@ -124,11 +133,7 @@ class SqlSessionStore:
             if not old_row:
                 return None
             
-            old_row.revoked_at = now
-            
             new_id = str(uuid.uuid4())
-            old_row.replaced_by = new_id
-            
             new_row = RefreshTokenRow(
                 id=new_id,
                 user_id=old_row.user_id,
@@ -139,6 +144,11 @@ class SqlSessionStore:
                 replaced_by=None,
             )
             session.add(new_row)
+            session.flush()
+            
+            old_row.revoked_at = now
+            old_row.replaced_by = new_id
+            
             session.commit()
             
             return {

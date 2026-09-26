@@ -32,8 +32,24 @@ def api():
     context_reads, context_commands = context_bindings(
         ContextService(SqlSnapshotStore(sessions), ExternalSources(), clock, reads)
     )
+    from tram.application.auth import AuthService
+    from tram.infrastructure.auth import SqlUserRepository, SqlSessionStore, Argon2PasswordHasher, JwtTokenIssuer
+    from tram.api.extensions import auth_bindings
+    
+    auth_service = AuthService(
+        users=SqlUserRepository(sessions),
+        sessions=SqlSessionStore(sessions),
+        hasher=Argon2PasswordHasher(),
+        issuer=JwtTokenIssuer("secret"),
+        clock=clock,
+        access_ttl=900,
+        refresh_ttl=86400,
+    )
+    auth_reads, auth_commands = auth_bindings(auth_service)
     extra_reads.update(context_reads)
+    extra_reads.update(auth_reads)
     extra_commands.update(context_commands)
+    extra_commands.update(auth_commands)
     app = create_http_app(
         reads,
         ForecastService(repo, clock, reads),
@@ -43,6 +59,7 @@ def api():
         unavailable_errors=(ConnectionError,),
         extra_reads=extra_reads,
         extra_commands=extra_commands,
+        auth_service=auth_service,
     )
     with TestClient(app) as client:
         yield client, contract, RunWorker(repo, clock, SeasonalNaive())
@@ -82,6 +99,7 @@ def test_catalog_auth_errors_and_swagger(api):
     checked(api, "GET", "/capabilities", role=None, status=401)
     checked(api, "GET", "/capabilities")
     checked(api, "GET", "/data-status")
+    checked(api, "GET", "/network", params={"network_revision_id": "demo-network-v1"})
     query = {"network_revision_id": "demo-network-v1", "valid_at": "2026-09-21"}
     checked(api, "GET", "/routes", params=query)
     checked(api, "GET", "/routes/demo-route-01", params=query)
@@ -253,3 +271,36 @@ def test_observations_reject_invalid_timestamps(api, invalid_time):
     }
     checked(api, "GET", "/observations", params=query)
     checked(api, "GET", "/observations", params={**query, "from": invalid_time}, status=422)
+
+def test_jwt_authorization_flow(api):
+    client, _, _ = api
+    
+    # 1. We can use the static token first
+    response = client.get("/api/v1/capabilities", headers={"Authorization": "Bearer " + "v" * 32})
+    assert response.status_code == 200
+
+    # 2. Login with seeded testuser
+    response = client.post("/api/v1/auth/login", json={"username": "testuser", "password": "password"})
+    assert response.status_code == 200, response.json()
+    data = response.json()
+    access_token = data["access_token"]
+    assert "tram_refresh" in response.cookies
+    refresh_token = response.cookies["tram_refresh"]
+
+    # 3. Use the JWT access token to get capabilities
+    response = client.get("/api/v1/capabilities", headers={"Authorization": f"Bearer {access_token}"})
+    assert response.status_code == 200
+
+    # 4. Get user info
+    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"})
+    assert response.status_code == 200
+    assert response.json()["username"] == "testuser"
+
+    # 6. Refresh the token
+    response = client.post("/api/v1/auth/refresh", cookies={"tram_refresh": refresh_token})
+    assert response.status_code == 200
+
+    # 7. Logout
+    new_refresh = response.cookies.get("tram_refresh", refresh_token)
+    response = client.post("/api/v1/auth/logout", cookies={"tram_refresh": new_refresh}, json={"everywhere": False})
+    assert response.status_code == 204

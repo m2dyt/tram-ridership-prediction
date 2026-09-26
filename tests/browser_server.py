@@ -69,8 +69,25 @@ def main():
         cr, cc = context_bindings(
             ContextService(SqlSnapshotStore(sessions), ExternalSources(), clock, reads)
         )
+        from tram.application.auth import AuthService
+        from tram.infrastructure.auth import SqlUserRepository, SqlSessionStore, Argon2PasswordHasher, JwtTokenIssuer
+        from tram.api.extensions import auth_bindings
+        
+        auth_service = AuthService(
+            users=SqlUserRepository(sessions),
+            sessions=SqlSessionStore(sessions),
+            hasher=Argon2PasswordHasher(),
+            issuer=JwtTokenIssuer("browser-test-secret"),
+            clock=clock,
+            access_ttl=900,
+            refresh_ttl=86400,
+        )
+        ar, ac = auth_bindings(auth_service)
         extra_reads.update(cr)
+        extra_reads.update(ar)
         extra_commands.update(cc)
+        extra_commands.update(ac)
+        
         app = create_http_app(
             reads,
             ForecastService(repo, clock, reads),
@@ -79,6 +96,7 @@ def main():
             operator_token="browser-operator-" * 3,
             extra_reads=extra_reads,
             extra_commands=extra_commands,
+            auth_service=auth_service,
         )
         stop = threading.Event()
         worker = RunWorker(repo, clock, SeasonalNaive())

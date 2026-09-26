@@ -148,8 +148,15 @@ class ReadService:
             raise ApplicationError(
                 "VALIDATION_ERROR", "direction_id requires route_id", "direction_id"
             )
-        if query.get("route_id"):
-            routes = [self.route(query["route_id"], query)]
+        route_ids = query.get("route_id")
+        if route_ids:
+            if not isinstance(route_ids, list):
+                route_ids = [route_ids]
+            if len(route_ids) > 1 and query.get("direction_id"):
+                raise ApplicationError(
+                    "VALIDATION_ERROR", "direction_id is not supported with multiple route_ids", "direction_id"
+                )
+            routes = [self.route(r_id, query) for r_id in route_ids]
         stop_map = {}
         for route in routes:
             directions = route["directions"]
@@ -175,10 +182,17 @@ class ReadService:
 
     @staticmethod
     def validate_spatial(network, profile, query):
-        route_id = query.get("route_id")
+        route_ids = query.get("route_id")
+        if route_ids and not isinstance(route_ids, list):
+            route_ids = [route_ids]
+            
         dimensions = ("direction_id", "stop_id", "stop_sequence", "segment_id")
-        if any(query.get(k) is not None for k in dimensions) and not route_id:
+        if any(query.get(k) is not None for k in dimensions) and not route_ids:
             raise ApplicationError("VALIDATION_ERROR", "Spatial filters require route_id")
+        
+        if route_ids and len(route_ids) > 1 and any(query.get(k) is not None for k in dimensions):
+            raise ApplicationError("VALIDATION_ERROR", "Deep spatial filters are not supported for multiple route_ids")
+            
         if query.get("stop_sequence") is not None and not query.get("stop_id"):
             raise ApplicationError("VALIDATION_ERROR", "stop_sequence requires stop_id")
         level = profile["spatial_level"]
@@ -190,54 +204,58 @@ class ReadService:
             raise ApplicationError(
                 "UNSUPPORTED_PROFILE", "Spatial filters do not match the profile"
             )
-        if not route_id:
+        if not route_ids:
             return
-        route = required(
-            next((r for r in network["routes"] if r["route"]["id"] == route_id), None), "Route"
-        )
-        if route_id not in profile["route_ids"]:
-            raise ApplicationError("UNSUPPORTED_PROFILE", "Route is unavailable in this profile")
-        directions = route["directions"]
-        if query.get("direction_id"):
-            selected = [d for d in directions if d["id"] == query["direction_id"]]
-            if not selected:
-                known = any(
-                    d["id"] == query["direction_id"]
-                    for r in network["routes"]
-                    for d in r["directions"]
-                )
-                raise ApplicationError(
-                    "VALIDATION_ERROR" if known else "NOT_FOUND",
-                    "Direction does not belong to the selected route",
-                )
-            directions = selected
-        if query.get("stop_id"):
-            known = any(s["id"] == query["stop_id"] for r in network["routes"] for s in r["stops"])
-            if not known:
-                raise ApplicationError("NOT_FOUND", "Stop not found")
-            if not any(
-                s["stop_id"] == query["stop_id"]
-                and (query.get("stop_sequence") is None or s["sequence"] == query["stop_sequence"])
-                for d in directions
-                for s in d["stops"]
-            ):
-                raise ApplicationError(
-                    "VALIDATION_ERROR",
-                    "Stop position does not belong to the selected route/direction",
-                )
-        if query.get("segment_id"):
-            known = any(
-                s["id"] == query["segment_id"]
-                for r in network["routes"]
-                for d in r["directions"]
-                for s in d["segments"]
+            
+        for rid in route_ids:
+            route = required(
+                next((r for r in network["routes"] if r["route"]["id"] == rid), None), "Route"
             )
-            if not known:
-                raise ApplicationError("NOT_FOUND", "Segment not found")
-            if not any(s["id"] == query["segment_id"] for d in directions for s in d["segments"]):
-                raise ApplicationError(
-                    "VALIDATION_ERROR", "Segment does not belong to selected route/direction"
-                )
+            if rid not in profile["route_ids"]:
+                raise ApplicationError("UNSUPPORTED_PROFILE", "Route is unavailable in this profile")
+                
+            if len(route_ids) == 1:
+                directions = route["directions"]
+                if query.get("direction_id"):
+                    selected = [d for d in directions if d["id"] == query["direction_id"]]
+                    if not selected:
+                        known = any(
+                            d["id"] == query["direction_id"]
+                            for r in network["routes"]
+                            for d in r["directions"]
+                        )
+                        raise ApplicationError(
+                            "VALIDATION_ERROR" if known else "NOT_FOUND",
+                            "Direction does not belong to the selected route",
+                        )
+                    directions = selected
+                if query.get("stop_id"):
+                    known = any(s["id"] == query["stop_id"] for r in network["routes"] for s in r["stops"])
+                    if not known:
+                        raise ApplicationError("NOT_FOUND", "Stop not found")
+                    if not any(
+                        s["stop_id"] == query["stop_id"]
+                        and (query.get("stop_sequence") is None or s["sequence"] == query["stop_sequence"])
+                        for d in directions
+                        for s in d["stops"]
+                    ):
+                        raise ApplicationError(
+                            "VALIDATION_ERROR",
+                            "Stop position does not belong to the selected route/direction",
+                        )
+                if query.get("segment_id"):
+                    known = any(
+                        s["id"] == query["segment_id"]
+                        for r in network["routes"]
+                        for d in r["directions"]
+                        for s in d["segments"]
+                    )
+                    if not known:
+                        raise ApplicationError("NOT_FOUND", "Segment not found")
+                    if not any(s["id"] == query["segment_id"] for d in directions for s in d["segments"]):
+                        raise ApplicationError(
+                            "VALIDATION_ERROR", "Segment does not belong to selected route/direction"
+                        )
 
     def observations(self, query):
         dataset = self.dataset(query["dataset_revision_id"])

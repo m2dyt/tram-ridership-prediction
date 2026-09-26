@@ -191,6 +191,27 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /network:
+    get:
+      tags:
+      - Dictionary
+      operationId: getNetwork
+      summary: Получение топологии сети
+      description: Возвращает граф сети для указанной версии.
+      parameters:
+      - $ref: '#/components/parameters/NetworkRevision'
+      responses:
+        '200':
+          description: Полная структура сети
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /routes:
     get:
       tags:
@@ -1107,6 +1128,104 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      operationId: authLogin
+      summary: Вход по логину/паролю
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: {type: string}
+                  token_type: {type: string}
+                  expires_in: {type: integer}
+                  role: {type: string}
+                  user:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      username: {type: string}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/refresh:
+    post:
+      tags:
+      - Auth
+      operationId: authRefresh
+      summary: Обновление access-токена
+      security: []
+      responses:
+        '200':
+          description: Новый токен выдан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: {type: string}
+                  token_type: {type: string}
+                  expires_in: {type: integer}
+                  role: {type: string}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags:
+      - Auth
+      operationId: authLogout
+      summary: Выход
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                everywhere: {type: boolean, default: false}
+      responses:
+        '204':
+          description: Успешный выход
+  /auth/me:
+    get:
+      tags:
+      - Auth
+      operationId: authMe
+      summary: Информация о пользователе
+      responses:
+        '200':
+          description: Информация о пользователе
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  username: {type: string}
+                  role: {type: string}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 components:
   securitySchemes:
     bearerAuth:
@@ -1161,10 +1280,13 @@ components:
       required: false
       description: Фильтр маршрута. Не номер маршрута.
       schema:
-        type: string
-        minLength: 1
-        maxLength: 128
-      example: demo-route-01
+        type: array
+        items:
+          type: string
+          minLength: 1
+          maxLength: 128
+      explode: true
+      example: [demo-route-01]
     DirectionId:
       name: direction_id
       in: query

@@ -114,6 +114,7 @@ def test_built_frontend_is_served_without_hiding_api(tmp_path, monkeypatch):
         "TRAM_VIEWER_TOKEN": "v" * 32,
         "TRAM_OPERATOR_TOKEN": "o" * 32,
         "TRAM_CURSOR_SECRET": "c" * 32,
+        "TRAM_AUTH_TOKEN_SECRET": "a" * 32,
         "TRAM_FRONTEND_DIST": str(tmp_path),
         "TRAM_DATABASE_URL": "sqlite+pysqlite:///:memory:",
     }.items():

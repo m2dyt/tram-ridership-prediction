@@ -78,6 +78,7 @@ class PasswordHasher(Protocol):
 
 class TokenIssuer(Protocol):
     def issue_access_token(self, user_id: str, role: str, now: datetime, ttl_seconds: int) -> tuple[str, datetime]: ...
+    def verify_access_token(self, token: str, now: datetime) -> Document | None: ...
 
 
 class SessionStore(Protocol):
