@@ -4,7 +4,7 @@
 
 ## Before using it
 
-Read the [current challenge/model plan](../../docs/HACKATHON_READINESS_PLAN.md) and task checklist ([DATA/MODEL/BACKEND](../../docs/ML_BACKEND_TASKS.md)). Verify the archive and data dictionary first. In particular, the current code fills missing joined target rows with zero, uses manual route/seasonal adjustments, forces route 5 to zero in the submission, and assumes exactly 14,640 test rows. Each choice requires validation against the actual challenge schema and fixed temporal validation. The organizer Q&A says route 5 must be present and may be zero; this does not validate any other rows.
+Read the [global project plan](../../00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md). Verify the archive and data dictionary first. In particular, the current code fills missing joined target rows with zero, uses manual route/seasonal adjustments, forces route 5 to zero in the submission, and assumes exactly 14,640 test rows. Each choice requires validation against the actual challenge schema and fixed temporal validation. The organizer Q&A says route 5 must be present and may be zero; this does not validate any other rows.
 
 Older descriptions of a “90.3%+” score or expected improvement are not verified in this repository. Cite a score only with its exact data/checksum, split, code/config, predictions and platform receipt. Do not use final test labels for model selection.
 
@@ -22,4 +22,4 @@ The script writes a semicolon-delimited CSV with `route;date;hour;prediction` an
 
 ## Inputs and dependencies
 
-The original challenge archive is linked from the user-provided specification: [dataset.zip](https://disk.yandex.ru/d/DiFwlfMOauxjBg). Save the original and data dictionary in `sources/`, record provenance and SHA-256, and put derived files under `data/`. The script imports the ML stack lazily, but the repo has a legacy `requirements-gpu.txt` in addition to root `requirements.txt`; dependency consolidation is an explicit item in [ML_BACKEND_TASKS.md](../../docs/ML_BACKEND_TASKS.md).
+The original challenge archive is linked from the user-provided specification: [dataset.zip](https://disk.yandex.ru/d/DiFwlfMOauxjBg). Save the original and data dictionary in `sources/`, record provenance and SHA-256, and put derived files under `data/`. The script imports the ML stack lazily, but the repo has a legacy `requirements-gpu.txt` in addition to root `requirements.txt`; dependency consolidation is an explicit item in the global plan.
