@@ -4,32 +4,32 @@ import argparse
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 if str(_WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(_WORKSPACE_ROOT))
 
-import pandas as pd
-
-from ml.training.tram.baseline import (
+from ml.training.tram.baseline import (  # noqa: E402
     BASE_PROFILE_COL,
     attach_historical_profiles,
     calculate_historical_profiles,
 )
-from ml.training.tram.bundle import (
+from ml.training.tram.bundle import (  # noqa: E402
     export_model_bundle,
     set_active_version,
 )
-from ml.training.tram.evaluation import (
+from ml.training.tram.evaluation import (  # noqa: E402
     compute_wape_metrics,
     evaluate_by_route,
     format_evaluation_report,
 )
-from ml.training.tram.features import build_feature_matrix
-from ml.training.tram.models import (
+from ml.training.tram.features import build_feature_matrix  # noqa: E402
+from ml.training.tram.models import (  # noqa: E402
     fit_final_and_predict,
     train_validation_models,
 )
-from ml.training.tram.submission import (
+from ml.training.tram.submission import (  # noqa: E402
     format_submission,
     generate_candidate_path,
     save_submission,

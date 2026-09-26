@@ -14,6 +14,7 @@ Verifies:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from pathlib import Path
 
@@ -218,10 +219,8 @@ def main():
     )
 
     if hasattr(sys.stdout, "reconfigure"):
-        try:
+        with contextlib.suppress(Exception):
             sys.stdout.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
 
     print("=" * 60)
     print(f"SUBMISSION VALIDATION REPORT: {args.submission.name}")

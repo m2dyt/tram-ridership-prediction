@@ -229,10 +229,7 @@ def load_model_bundle(
 ) -> TramModelBundle:
     """Load a versioned model bundle with checksum verification."""
     path = Path(version_or_path)
-    if not path.is_dir():
-        bundle_dir = models_root / str(version_or_path)
-    else:
-        bundle_dir = path
+    bundle_dir = models_root / str(version_or_path) if not path.is_dir() else path
 
     if not bundle_dir.is_dir():
         raise BundleNotFoundError(f"Bundle directory not found: {bundle_dir}")

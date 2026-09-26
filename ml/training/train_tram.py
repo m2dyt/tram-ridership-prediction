@@ -7,22 +7,22 @@ if str(_WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(_WORKSPACE_ROOT))
 
 # Re-export key components for backwards compatibility with any existing imports
-from ml.training.tram.baseline import (
+from ml.training.tram.baseline import (  # noqa: E402
     BASE_PROFILE_COL,
     attach_historical_profiles,
     calculate_historical_profiles,
     predict_seasonal_baseline,
 )
-from ml.training.tram.cli import (
+from ml.training.tram.cli import (  # noqa: E402
     main,
     train_and_evaluate,
 )
-from ml.training.tram.evaluation import (
+from ml.training.tram.evaluation import (  # noqa: E402
     compute_wape_metrics,
     evaluate_by_route,
     format_evaluation_report,
 )
-from ml.training.tram.features import (
+from ml.training.tram.features import (  # noqa: E402
     ACTIVE_ROUTES,
     ALL_ROUTES,
     CATEGORICAL_FEATURES,
@@ -31,11 +31,11 @@ from ml.training.tram.features import (
     build_feature_matrix,
     generate_full_grid,
 )
-from ml.training.tram.models import (
+from ml.training.tram.models import (  # noqa: E402
     fit_final_and_predict,
     train_validation_models,
 )
-from ml.training.tram.submission import (
+from ml.training.tram.submission import (  # noqa: E402
     format_submission,
     save_submission,
 )
