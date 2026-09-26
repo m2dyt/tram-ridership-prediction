@@ -33,6 +33,19 @@ def main():
         engine = make_engine("sqlite+pysqlite:///" + (root / "smoke.db").as_posix())
         Base.metadata.create_all(engine)
         sessions = session_factory(engine)
+        
+        from tram.infrastructure.database import UserRow
+        from tram.infrastructure.auth import Argon2PasswordHasher
+        import uuid
+        with sessions() as session:
+            session.add(UserRow(
+                id=str(uuid.uuid4()),
+                username="testuser",
+                password_hash=Argon2PasswordHasher().hash("password"),
+                role="operator"
+            ))
+            session.commit()
+            
         manifest, records = read_bundle(root / "demo", contract)
         PublishDataset(SqlDatasetWriter(sessions), clock).execute(manifest, records)
         repo = SqlRepository(sessions)
