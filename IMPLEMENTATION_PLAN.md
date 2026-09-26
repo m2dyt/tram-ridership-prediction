@@ -1,6 +1,6 @@
 # План реализации tram-ridership-prediction
 
-> **Исторический документ.** Он отражает начальную постановку проекта и больше не является рабочим планом. Единственная актуальная очередь работ находится в [глобальном плане к эталонному решению](00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md).
+> **Смешанный статус.** Разделы 1–12 ниже — исторический документ: он отражает начальную постановку проекта (20.09.2026) и не отражает фактический прогресс данных/ML. Очередь работ по данным, модели и обучению ведётся в [глобальном плане к эталонному решению](00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md). Раздел **«Расширение backend HTTP API»** сразу после дополнений пользователя ниже — активный, отдельно поддерживаемый план: полный реестр эндпоинтов для фронта/карты, авторизация `/api/v1/auth` и уведомления карты. Он детализирует этап 5 глобального плана для конкретных операций контракта и не дублирует его очередь по данным/ML.
 
 Дата исходного плана: 20.09.2026, версия 0.1. Актуальная готовность backend и ML-основы без обучения — в [README](README.md), результаты шагов — в [журнале](docs/IMPLEMENTATION_LOG.md).
 
@@ -15,6 +15,170 @@
 5. Добавить погодные и событийные источники: первым погодным адаптером планируется Open-Meteo, альтернативным — WeatherAPI.com; для мероприятий — KudaGo и Timepad после проверки доступа. Документация, примеры запросов и фактические результаты сетевых проверок — в [DATA_SOURCES.md](docs/DATA_SOURCES.md).
 
 Эти дополнения зафиксированы как требования и план следующих реализаций. Сейчас не добавлены автоматические загрузчики, постоянное состояние групп пассажиров и frontend. Рабочий backend, сезонная база и действующий OpenAPI сохраняют ранее описанную готовность; обучение по-прежнему не запускается.
+
+## Расширение backend HTTP API — эндпоинты, авторизация и карта
+
+**Статус: активный раздел.** Дополняет этап 5 «Полный API» [глобального плана](00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md) конкретными операциями контракта; не переопределяет его очередь по данным/ML/модели. Ничего из раздела не реализовано в коде — это план на реализацию по тем же правилам проекта (**план → реализация → review → исправления → commit**), контракт `openapi.yaml` меняется вместе с обработчиком и тестом ответа ([ADR 0001](docs/decisions/0001-clean-architecture.md), [backend/src/tram/api/README.md](backend/src/tram/api/README.md)).
+
+### Основание
+
+Снимок кода на момент составления (27.09.2026): ветка `main`, commit `4a050df` (рабочая копия), и ветка `origin/etalon`, commit `fd939d7` — она не слита в `main`, но уже реализует часть очереди ML/backend из глобального плана (D1–D2, M1–M5, D3/M4, R1, часть B1): модульный `ml/training/tram/` (`features.py`, `baseline.py`, `models.py`, `evaluation.py`, `bundle.py`, `submission.py`, `cli.py`), неизменяемые версии модели в `models/tram/<version>/` (`manifest.json`, `metrics.json`, `model-card.md`, единый указатель `active_version.txt`), инфраструктурный адаптер `backend/src/tram/infrastructure/ml/artifact_predictor.py` (`ArtifactPredictor`), подключённый в `composition.build_worker` с fallback на `SeasonalNaive`, новые настройки `model_version`/`models_root`/`fallback_to_seasonal_naive`, а также `scripts/benchmark_inference.py` и `scripts/validate_submission.py`. **Раздел «Реестр моделей» ниже проектируется под этот уже реализованный формат бандла**, а не гипотетический, независимо от того, когда `etalon` попадёт в `main` — `IMPLEMENTATION_PLAN.md` и `00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md` идентичны на обеих ветках.
+
+Существующий контракт — [openapi.yaml](openapi.yaml), 21 операция, OpenAPI 3.1.0, авторизация статическим Bearer-токеном из конфигурации (`viewer`/`operator`, `backend/src/tram/api/app.py::authorize`, `backend/src/tram/infrastructure/settings.py`); выдача токенов и логин явно исключены из P0 (`securitySchemes.bearerAuth.description`). Существующий frontend (`frontend/src/features/*.jsx`) уже вызывает все 21 операции — см. таблицу §1.1; карта `frontend/src/components/Map.jsx` рисует сеть и результат прогноза, но не показывает статус самого расчёта.
+
+### 1. Полный реестр эндпоинтов
+
+#### 1.1 Уже реализовано (21 операция, изменений не требует)
+
+| Метод и путь | Назначение | Кто уже вызывает во frontend |
+| --- | --- | --- |
+| `GET /health` | Готовность API и БД, без секретов | инфраструктура/healthcheck (`compose.yaml`); UI не вызывает напрямую |
+| `GET /capabilities` | Доступные показатели, профили, версии данных/сети | `App.jsx` при входе |
+| `GET /data-status` | Свежесть, режим источника, текущая версия | `Common.jsx` → `Freshness`, вызывается из `App.jsx` |
+| `GET /routes` | Список маршрутов на дату | `App.jsx` (выбор маршрута) |
+| `GET /routes/{route_id}` | Направления, остановки, геометрия, участки | `App.jsx` → передаётся в `Map.jsx`, `Forecast.jsx`, `Occupancy.jsx` |
+| `GET /stops` | Остановки с фильтром маршрута/направления | реализован; сейчас не вызывается — точки остановок фронт получает через `stops` внутри `RouteDetail` |
+| `GET /observations` | История показателя на выбранной детализации | `History.jsx` |
+| `POST /forecast-runs` | Асинхронное задание прогноза | `Forecast.jsx` (создание расчёта) |
+| `GET /forecast-runs` | Поиск сохранённых запусков | `Forecast.jsx` (последний запуск профиля/маршрута) |
+| `GET /forecast-runs/{run_id}` | Статус/параметры запуска | `Forecast.jsx`, поллинг с фиксированным интервалом 2 с, пока `queued`/`running` |
+| `GET /forecast-runs/{run_id}/points` | Точки прогноза для графика | `Forecast.jsx` → `Chart.jsx` |
+| `GET /forecast-runs/{run_id}/map` | GeoJSON одного интервала | `Forecast.jsx` → `Map.jsx` |
+| `GET /evaluations` | Отчёты проверки на истории | `Evaluations.jsx` |
+| `GET /evaluations/{evaluation_id}` | Метрики/folds/ограничения | `Evaluations.jsx` |
+| `GET /evaluations/{evaluation_id}/points` | Факт и прогноз для графика истории | `Evaluations.jsx` |
+| `GET /occupancy-trips` | Рейсы и остаток пассажиров | `Occupancy.jsx` |
+| `POST /occupancy-trips` | Создать план рейса | `Occupancy.jsx` |
+| `GET /occupancy-trips/{trip_id}` | Текущее состояние рейса | `Occupancy.jsx` |
+| `GET /occupancy-trips/{trip_id}/events` | Журнал событий рейса | `Occupancy.jsx` |
+| `POST /occupancy-trips/{trip_id}/events` | Обработать следующую остановку | `Occupancy.jsx` |
+| `GET /context/snapshots` | Сохранённые снимки погоды/событий/гео (метро/хабы — `kind=geo`) | `Context.jsx` |
+| `GET /context/snapshots/{snapshot_id}` | Снимок с нормализованными записями | `Context.jsx` |
+| `POST /context/refresh` | Получить и сохранить свежий снимок | `Context.jsx` |
+| `POST /scenarios/fleet` | Сценарий выпуска вагонов | `Fleet.jsx` |
+
+Вывод: справочные данные для карты (точки остановок трамваев, маршруты, геометрия участков, метро/хабы через `context/snapshots`) уже покрыты контрактом — заново их реализовывать не нужно. Ниже — только реальные пробелы.
+
+#### 1.2 Новые/расширенные операции
+
+| Метод и путь | Статус | Назначение |
+| --- | --- | --- |
+| `POST /auth/login` | новый | Вход по логину/паролю, выдача access-токена и refresh-сессии (§4) |
+| `POST /auth/refresh` | новый | Обновление access-токена по refresh-сессии (§4) |
+| `POST /auth/logout` | новый | Отзыв refresh-сессии, текущей или всех (§4) |
+| `GET /auth/me` | новый | Текущая личность/роль/срок токена (§4) |
+| `GET /models` | новый | Реестр версий модели из `models/tram/`, активная версия (§5) |
+| `GET /models/{model_id}` | новый | Манифест, метрики, model-card одной версии (§5) |
+| `GET /network` | новый | `RouteDetail[]` для всех активных на дату маршрутов одним вызовом — карта без N+1 (§2.1) |
+| `GET /forecast-runs` + параметр `active` | расширение | Запуски в очереди/выполнении по видимым маршрутам — бейдж на карте (§3.2) |
+| `ForecastRunPage.recommended_poll_seconds` | расширение | Интервал повторного опроса, по аналогии с `DataStatus` (§3.2) |
+| `route_id` как список через запятую на `/observations`, `/forecast-runs`, `/forecast-runs/{id}/points`, `/forecast-runs/{id}/map`, `/evaluations/{id}/points` | расширение | Несколько видимых на карте маршрутов одним запросом (§2.2) |
+| `GET /context/snapshots/{id}/geojson` | новый | `GeoRecord` как `FeatureCollection` для прямой отрисовки в Leaflet (§2.3) |
+| `GET /forecast-runs/{run_id}/alerts` | новый, P1, требует решения | Ряды/интервалы с прогнозом выше типичного уровня — предупреждение о повышенной загрузке (§3.3) |
+
+### 2. Данные для рендера карты: пробелы и решения
+
+Карта (`Map.jsx`) сегодня рисует три слоя: сеть маршрута (`route.directions[].geometry`, `route.stops[].geometry` — из `RouteDetail`), результат прогноза (`forecast.features` — из `/forecast-runs/{id}/map`, GeoJSON `Point`/`LineString`/`MultiLineString` по `SpatialLevel`) и контекст (`context` — плоский `{coordinates,title,category}` из `GeoRecord`, не GeoJSON, координаты собираются вручную). Точки остановок и маршруты из запроса пользователя это уже покрывает; реальных пробелов три.
+
+#### 2.1 Целая сеть одним вызовом
+
+`GET /routes` не содержит геометрию (её даёт только `GET /routes/{route_id}`), поэтому карта «вся сеть» сейчас требует N запросов на N маршрутов. Предлагается новая операция `GET /network` — `{network_revision_id, valid_at, items: RouteDetail[], page}` (по структуре как `RoutePage`/`StopPage`, но с полным `RouteDetail` в `items`), а не условный `expand`-параметр на `/routes`: в этом контракте одна операция даёт одну схему ответа, менять её по значению query-параметра означало бы отступить от уже принятого стиля (`additionalProperties:false`, фиксированная схема на каждый `operationId`).
+
+#### 2.2 Несколько маршрутов в одном запросе
+
+Пространственные фильтры (`route_id` и то, что от него зависит — `direction_id`/`stop_id`/`segment_id`) сейчас принимают одно значение. Важно: текущий разбор параметров в `app.py::parameters()` явно отклоняет повтор одного query-параметра («Parameter must occur once»), поэтому **простой repeated `route_id=a&route_id=b` работать не будет без изменения этой общей проверки**. Предлагается вариант без этого изменения: `route_id` через запятую в одном параметре (`route_id=demo-route-01,demo-route-02`, `schema: {type: array, items: {...}, style: form, explode: false}`), с лимитом 100 — по аналогии с `max_routes_per_run` в `Capabilities`. Разбор — в тех же местах, где сейчас читается одиночный `route_id` (`ReadService.validate_spatial`, `repository.observation_points/forecast_points/evaluation_points`).
+
+#### 2.3 Контекстные слои как GeoJSON
+
+`GeoRecord` (`{id,title,coordinates,category}`) — не `Feature`, поэтому `Map.jsx` вручную реверсит координаты вместо переиспользования `L.geoJSON(...)`, которым уже рисуется прогноз. Новая операция `GET /context/snapshots/{snapshot_id}/geojson` (`application/geo+json`, `FeatureCollection` с `Feature.geometry=Point`, `properties={id,title,category}`) — отдельная операция по тому же принципу, что и `/forecast-runs/{run_id}/map` относительно `/forecast-runs/{run_id}/points`, а не смена media type по query-параметру.
+
+### 3. Уведомление на карте о загрузке маршрута
+
+Формулировка задачи допускает два разных смысла — оба стоит спроектировать, но с разным статусом готовности.
+
+#### 3.1 Трек А — расчёт прогноза выполняется/готов (P0/P1, готово к реализации)
+
+Сегодня `Forecast.jsx` поллит статус ОДНОГО уже выбранного/созданного запуска (`setTimeout` 2000 мс, пока `status in (queued,running)`); на карте до выбора маршрута и запуска никакого индикатора нет. Предложение — без новой инфраструктуры, тем же поллингом:
+
+1. `GET /forecast-runs` получает новый необязательный параметр `active` (`true` ⇒ эквивалент `status in (queued,running)` без второго вызова с `status=queued` и ещё одного с `status=running`); вместе с `route_id` из §2.2 один запрос покрывает все видимые на карте маршруты.
+2. `ForecastRunPage` получает поле `recommended_poll_seconds` (по аналогии с `DataStatus.recommended_poll_seconds`) — контрактное изменение (`additionalProperties:false`, нужно добавить в `required`/`properties`).
+3. Поведение карты: пока для маршрута есть активный `run`, `Map.jsx` показывает бейдж «прогноз загрузки маршрута рассчитывается» на слое маршрута; при переходе в `succeeded` — одноразовое уведомление «прогноз готов» (пользователь сам решает переключить карту на этот `run_id`, без автоматической подмены — так же, как уже описано поведение при смене `dataset_revision_id` в `openapi.yaml`); при `failed` — предупреждение с `failure.message`, без деталей исключения.
+
+#### 3.2 Реализация трека А
+
+Изменения только в уже существующих операциях: `service.py::ReadService.runs` (фильтр `active`), `repository.py` (SQL-условие по статусу), `openapi.yaml` (`parameters.RunStatus`-подобный новый параметр + поле в `ForecastRunPage`). Новых таблиц/фоновых процессов не требуется.
+
+#### 3.3 Трек Б — предупреждение о прогнозируемой повышенной загрузке (P1, не готово к реализации)
+
+Это в точности нерешённый пункт `F10` исходного плана (раздел 10 ниже): нужен согласованный показатель, порог, период и правило снятия предупреждения, и «спрос не должен называться перегрузом вагона» без проверки. Ничего из этого не появилось с момента первой формулировки, поэтому здесь не фиксируется число. Проектное place-holder — отдельная операция `GET /forecast-runs/{run_id}/alerts`, а не поле в самом `ForecastPoint`: чтобы не смешивать проверенный контракт прогноза с эвристикой сравнения, которая ещё не согласована. Реализация блокирована пунктом «порог» в таблице §6.
+
+### 4. `/api/v1/auth`: логин, refresh, logout
+
+Сейчас единственный механизм — сравнение Bearer-токена с двумя константами из `.env` (`TRAM_VIEWER_TOKEN`/`TRAM_OPERATOR_TOKEN`, `hmac.compare_digest`, без пользователей, сессий и историй входа); это осознанное решение P0 для закрытого стенда (`openapi.yaml`: «Выдача токенов, регистрация и пароли не входят в P0»). Ниже — план для реального логина, который **добавляется параллельно**, не ломая уже документированный сценарий тестового стенда (`docs/TESTING.md`, `tests/browser_server.py` со своими фиксированными `browser-operator-...`/`browser-viewer-...` ключами).
+
+#### 4.1 Эндпоинты
+
+| Операция | Тело/вход | Ответ 200 | Ошибки |
+| --- | --- | --- | --- |
+| `POST /auth/login` (`security: []`, публичная) | `{"username","password"}` | `{"access_token","token_type":"bearer","expires_in","role","user":{"id","username"}}`; refresh — `Set-Cookie: tram_refresh=…; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` | `400` неверное тело, `401 UNAUTHORIZED` неверные логин/пароль (без уточнения, какое поле неверно), `429 RATE_LIMITED` при повторных неудачных попытках |
+| `POST /auth/refresh` (авторизация — cookie `tram_refresh`, не Bearer) | тело не требуется | новый `access_token` (как выше); refresh-cookie ротируется (старое значение отзывается) | `401 UNAUTHORIZED` — просрочен/отозван/отсутствует; фронт трактует как разлогин |
+| `POST /auth/logout` (cookie `tram_refresh`) | необязательно `{"everywhere":bool}` | `204`, отзыв refresh-сессии (или всех сессий пользователя), `Set-Cookie` с `Max-Age=0` | безопасно вызывать без активной сессии |
+| `GET /auth/me` (Bearer, viewer/operator) | — | `{"id","username","role","issued_at","expires_at"}` | `401` истёкший/невалидный access-токен |
+
+Новых кодов в `Error.code` не требуется: используются уже существующие `UNAUTHORIZED`/`RATE_LIMITED`/`BAD_REQUEST`/`VALIDATION_ERROR` — намеренно без `INVALID_CREDENTIALS`/`TOKEN_EXPIRED`, чтобы не давать клиенту различать «неверный пароль» и «неверный логин» (тот же принцип, что уже в контракте: «Стек вызовов и идентификаторы пассажиров клиенту не выдаются»).
+
+#### 4.2 Хранение и миграция
+
+Новая ревизия `0004`: таблица `users` (`id` uuid pk, `username` unique, `password_hash`, `role` с тем же `CheckConstraint`, что у `RunRow.status`, `is_active`, `created_at`) и `refresh_tokens` (`id` pk, `user_id` fk, `token_hash` — хранится хэш, не сам токен, unique/indexed, `issued_at`, `expires_at`, `revoked_at` nullable, `replaced_by` nullable self-fk для цепочки ротации). Провижининг пользователей (кто и как создаёт `operator`/`viewer` аккаунты) не входит в этот раздел — открытый вопрос §6.
+
+#### 4.3 Слои (по ADR 0001)
+
+`domain/auth.py` (опционально) — чистая проверка формы логина/пароля, stdlib. `application/auth.py` — сценарии login/refresh/logout/me поверх новых портов `UserRepository`, `PasswordHasher`, `TokenIssuer`, `SessionStore` в `application/ports.py` (без импорта SQL/JWT-библиотек, как и остальной `application`). `infrastructure/auth.py` — SQL-репозиторий, argon2-хеширование пароля, выпуск/проверка JWT. `api/app.py::authorize` расширяется: сначала пробует статическое сравнение (как сейчас), затем — проверку подписи/срока JWT; оба пути дают роль для остального кода без изменений в обработчиках.
+
+#### 4.4 Настройки и зависимости
+
+`Settings` (`infrastructure/settings.py`): `auth_token_secret: SecretStr` (включить в `require_api_secrets()` — четвёртый секрет ≥32 символов, отличный от остальных), `access_token_ttl_seconds: int = 900`, `refresh_token_ttl_seconds: int = 30*86400`, `allow_static_tokens: bool = True` (пока не принято отдельное решение об отключении в проде — см. §6). Новые зависимости — в базовые `requirements.txt`/`pyproject.toml [project.dependencies]` (не в `optional-dependencies`, это не тренировочный экстра, а обязательный рантайм): `pyjwt>=2.9,<3`, `argon2-cffi>=23,<24`.
+
+### 5. Реестр моделей: `GET /models`, `GET /models/{model_id}`
+
+Строится поверх уже реализованного на `origin/etalon` формата (`models/tram/<version>/manifest.json|metrics.json|model-card.md`, `active_version.txt`, `ArtifactPredictor.from_active_version`) — см. «Основание» выше. `GET /models` (viewer+) перечисляет найденные версии: `{"items":[{"id","version","method","is_active","is_baseline","metrics":{...из metrics.json...}}], "page"}`; пагинация избыточна при ожидаемых единицах версий, но формат ответа держится совместимым с остальными списками. `GET /models/{model_id}` — тот же элемент плюс содержимое `config.json` и текст `model-card.md`.
+
+Осознанно **не предлагается** `POST /models/{id}/activate` по HTTP: переключение активной версии уже задокументировано как явное действие эксплуатации (`Set-Content models/tram/active_version.txt …` в `docs/OPERATIONS.md` на `etalon`, `models/README.md`: «best/candidate alias, переключаемый только явной командой»). Инвертировать это в операцию, доступную любому `operator`-токену без отдельного review, значило бы отменить уже принятое архитектурное решение без нового основания.
+
+### 6. Открытые вопросы
+
+| Вопрос | Предлагаемое решение | Что подтвердить |
+| --- | --- | --- |
+| Идентификатор для логина | `username` в единой таблице `users`, роли `viewer`/`operator` как сейчас | Нужен ли email, SSO/OAuth — не следует из спецификации хакатона |
+| Где живёт refresh-токен | HttpOnly/Secure/SameSite=Strict cookie на `/api/v1/auth`, ротация при каждом refresh | Совместимо ли с нетипичными деплоями (отдельный Swagger UI из раздела 12 — другой origin, без cookie) |
+| Статические токены viewer/operator | Оставить рабочими параллельно (`allow_static_tokens`) — иначе ломается `tests/browser_server.py` и весь ручной сценарий `docs/TESTING.md` | Кто и когда отключает их в проде |
+| Провижининг пользователей | Не входит в этот раздел | CLI (`tram users create`), ручной SQL или отдельный этап |
+| Порог «повышенной загрузки» (трек Б, §3.3) | Не фиксировать сейчас | Показатель/порог/период/правило снятия — тот же открытый вопрос `F10`, что и раньше |
+| Множественные `route_id` в GET-фильтрах | `route_id=a,b,c` одним параметром (§2.2), не повтор параметра | Достаточен ли лимит 100, как в `max_routes_per_run` |
+| Push вместо поллинга статуса расчёта | Не делать сейчас: поллинг с `Retry-After` уже работает (§3.1–3.2); SSE/WebSocket — P2 | Появится ли нагрузка нескольких одновременных диспетчеров, оправдывающая эту инфраструктуру |
+
+### 7. Очередь задач
+
+| ID | Задача | Готово, когда |
+| --- | --- | --- |
+| AUTH1 | Миграция `0004` (`users`, `refresh_tokens`); настройки `auth_token_secret`/`access_token_ttl_seconds`/`refresh_token_ttl_seconds`/`allow_static_tokens`; `pyjwt`/`argon2-cffi` в requirements.txt и pyproject.toml | Миграция применяется/откатывается, `alembic check` чист, зависимости ставятся в `.venv` |
+| AUTH2 | `application/auth.py` и порты `UserRepository`/`PasswordHasher`/`TokenIssuer`/`SessionStore` | Юнит-тесты сценариев проходят на фейковых портах; в `application` нет SQL/JWT-импортов |
+| AUTH3 | `infrastructure/auth.py`: SQL-репозиторий, argon2, выпуск/проверка JWT | Пароль не хранится и не логируется в открытом виде; просроченный/отозванный refresh отклоняется |
+| AUTH4 | `authorize()` принимает статический токен и JWT; операции `/auth/login|refresh|logout|me` в `openapi.yaml`, `extensions.py`, `app.py` | `tests/test_api.py` покрывает оба пути авторизации; `browser_server.py`/`TESTING.md` не сломаны |
+| AUTH5 | Frontend: форма логина в `App.jsx` вместо поля «ключ», silent-refresh, `/auth/me` для отображения роли | Ручной сценарий `TESTING.md` пройден с реальным логином; ключ operator/viewer остаётся рабочим fallback'ом |
+| AUTH6 | ADR 0003 (авторизация: JWT + refresh-cookie + argon2, сосуществование со статическими токенами) после согласования §6 | ADR принят, ссылка добавлена в `docs/decisions/README.md` |
+| MAP1 | `GET /network` — `RouteDetail[]` для всех активных маршрутов одним вызовом | Один запрос заменяет N обращений к `GET /routes/{id}`; ответ валиден по новой схеме `NetworkPage` |
+| MAP2 | `route_id` через запятую на `/observations`, `/forecast-runs`, `/forecast-runs/{id}/points`, `/forecast-runs/{id}/map`, `/evaluations/{id}/points` | Один запрос отдаёт данные нескольких видимых на карте маршрутов; лимит согласован с `max_routes_per_run` |
+| MAP3 | `GET /forecast-runs?active=true`, `ForecastRunPage.recommended_poll_seconds` | `Map.jsx` показывает бейдж «прогноз считается» по видимым маршрутам без ручного выбора `run_id` |
+| MAP4 | `GET /context/snapshots/{id}/geojson` | `Map.jsx` рисует контекстный слой тем же `L.geoJSON`, что и прогноз |
+| MODEL1 | `GET /models`, `GET /models/{model_id}` — читают `models/tram/<version>/*` и `active_version.txt` | Ответ отражает реальный активный бандл `ArtifactPredictor`; повреждённый/отсутствующий бандл — понятная ошибка, не 500 |
+| MAP5 (после решения по порогу) | `GET /forecast-runs/{run_id}/alerts` | Реализуется только после согласования показателя/порога в §6 (тот же критерий, что у `F10`) |
+
+Как и в остальном плане: каждая задача — отдельная ветка/коммит, **план пунктами → реализация → review diff и edge cases → тесты → обновление README затронутой папки → commit**.
+
+### 8. Что осознанно не входит в этот раздел
+
+Живые координаты вагонов на карте — не предлагаются: в проекте не подтверждён источник данных телеметрии в реальном времени (см. `docs/DATA_SOURCES.md`, `docs/STATUS.md`), а показывать на карте выдуманную позицию хуже, чем не показывать её вовсе. Квартальные данные метро (`prepare-metro`/`evaluate-metro`) не получают HTTP-эндпоинта — это осознанная граница, зафиксированная в `docs/METRO_PIPELINE.md` («квартальная частота не поддерживается текущими профилями API»); её пересмотр требует согласованного расширения временного контракта, а не одного эндпоинта. Переключение активной модели по HTTP — см. §5.
 
 ## 1. Выводы из анализа исходного документа
 
