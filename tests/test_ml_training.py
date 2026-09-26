@@ -1,8 +1,5 @@
-import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 import pytest
+
 from ml.training.prepare import extract_features
 from ml.training.train import build_and_train_ridge, compute_metrics
 
@@ -26,11 +23,41 @@ def test_metrics_empty():
 def test_feature_extraction_has_no_future_leakage():
     series_list = [{"series_id": "s1", "station_name": "TestStation", "line": "Line 1"}]
     quarters_records = [
-        {"series_id": "s1", "quarter": "2021-Q1", "incoming": 100, "outgoing": 100, "missing_reason": None},
-        {"series_id": "s1", "quarter": "2021-Q2", "incoming": 110, "outgoing": 110, "missing_reason": None},
-        {"series_id": "s1", "quarter": "2021-Q3", "incoming": 120, "outgoing": 120, "missing_reason": None},
-        {"series_id": "s1", "quarter": "2021-Q4", "incoming": 130, "outgoing": 130, "missing_reason": None},
-        {"series_id": "s1", "quarter": "2022-Q1", "incoming": 140, "outgoing": 140, "missing_reason": None},
+        {
+            "series_id": "s1",
+            "quarter": "2021-Q1",
+            "incoming": 100,
+            "outgoing": 100,
+            "missing_reason": None,
+        },
+        {
+            "series_id": "s1",
+            "quarter": "2021-Q2",
+            "incoming": 110,
+            "outgoing": 110,
+            "missing_reason": None,
+        },
+        {
+            "series_id": "s1",
+            "quarter": "2021-Q3",
+            "incoming": 120,
+            "outgoing": 120,
+            "missing_reason": None,
+        },
+        {
+            "series_id": "s1",
+            "quarter": "2021-Q4",
+            "incoming": 130,
+            "outgoing": 130,
+            "missing_reason": None,
+        },
+        {
+            "series_id": "s1",
+            "quarter": "2022-Q1",
+            "incoming": 140,
+            "outgoing": 140,
+            "missing_reason": None,
+        },
     ]
     entrances = {"TestStation": 3}
 

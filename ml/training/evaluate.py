@@ -17,17 +17,21 @@ if str(ROOT / "backend" / "src") not in sys.path:
 if str(ROOT / "ml" / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "ml" / "src"))
 
-from tram.domain.metro import Quarter
+from tram.domain.metro import Quarter  # noqa: E402
 
 
 def compute_metrics(actuals: list[float], preds: list[float]) -> dict[str, float | None]:
     if not actuals:
         return {"mae": 0.0, "wape": None, "count": 0}
-    abs_errors = [abs(a - p) for a, p in zip(actuals, preds)]
+    abs_errors = [abs(a - p) for a, p in zip(actuals, preds, strict=True)]
     mae = sum(abs_errors) / len(actuals)
     actual_sum = sum(actuals)
     wape = (sum(abs_errors) / actual_sum) if actual_sum > 0 else None
-    return {"mae": round(mae, 2), "wape": round(wape, 4) if wape is not None else None, "count": len(actuals)}
+    return {
+        "mae": round(mae, 2),
+        "wape": round(wape, 4) if wape is not None else None,
+        "count": len(actuals),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,7 +70,6 @@ def main(argv: list[str] | None = None) -> int:
     feat_info = json.loads((model_dir / "features.json").read_text(encoding="utf-8"))
 
     splits = meta["splits"]
-    train_start = Quarter.parse(splits["train_start"])
     val_start = Quarter.parse(splits["validation_start"])
     test_start = Quarter.parse(splits["test_start"])
     test_end = Quarter.parse(splits["test_end"])
@@ -136,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         base_actuals = []
         base_preds = []
         matched_cand_preds = []
-        for r, cp in zip(part_rows, clipped_preds):
+        for r, cp in zip(part_rows, clipped_preds, strict=True):
             key = (r["series_id"], r["quarter"])
             if key in baseline_preds and baseline_preds[key] is not None:
                 base_actuals.append(float(r["target"]))
@@ -144,9 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                 matched_cand_preds.append(cp)
 
         base_metrics = compute_metrics(base_actuals, base_preds) if base_actuals else None
-        comp_metrics = (
-            compute_metrics(base_actuals, matched_cand_preds) if base_actuals else None
-        )
+        comp_metrics = compute_metrics(base_actuals, matched_cand_preds) if base_actuals else None
 
         wape_delta = None
         if (

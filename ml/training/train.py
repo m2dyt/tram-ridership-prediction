@@ -9,7 +9,6 @@ Adheres strictly to the evaluation protocol:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -21,7 +20,7 @@ if str(ROOT / "backend" / "src") not in sys.path:
 if str(ROOT / "ml" / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "ml" / "src"))
 
-from tram.domain.metro import Quarter
+from tram.domain.metro import Quarter  # noqa: E402
 
 
 def load_dataset(
@@ -49,11 +48,15 @@ def load_dataset(
 def compute_metrics(actuals: list[float], preds: list[float]) -> dict[str, float | None]:
     if not actuals:
         return {"mae": 0.0, "wape": None, "count": 0}
-    abs_errors = [abs(a - p) for a, p in zip(actuals, preds)]
+    abs_errors = [abs(a - p) for a, p in zip(actuals, preds, strict=True)]
     mae = sum(abs_errors) / len(actuals)
     actual_sum = sum(actuals)
     wape = (sum(abs_errors) / actual_sum) if actual_sum > 0 else None
-    return {"mae": round(mae, 2), "wape": round(wape, 4) if wape is not None else None, "count": len(actuals)}
+    return {
+        "mae": round(mae, 2),
+        "wape": round(wape, 4) if wape is not None else None,
+        "count": len(actuals),
+    }
 
 
 def build_and_train_ridge(
@@ -105,6 +108,7 @@ def build_and_train_ridge(
     # Format training arrays
     def to_df(rows_data):
         import pandas as pd
+
         records = []
         for r in rows_data:
             rec = {c: r.get(c) for c in num_cols}
@@ -298,15 +302,15 @@ def main(argv: list[str] | None = None) -> int:
     card_content = f"""# Model Card: {output_dir.name}
 
 - **Model Type**: {model_type}
-- **Trained At**: {meta['created_at']}
+- **Trained At**: {meta["created_at"]}
 - **Training Period**: {train_start} to {validation_start.shift(-1)} ({len(train_rows)} samples)
 - **Validation Period**: {validation_start} to {test_start.shift(-1)} ({len(val_rows)} samples)
-- **Validation MAE**: {val_metrics.get('mae')} passengers / quarter
-- **Validation WAPE**: {val_metrics.get('wape') * 100 if val_metrics.get('wape') is not None else 'N/A'}%
+- **Validation MAE**: {val_metrics.get("mae")} passengers / quarter
+- **Validation WAPE**: {val_metrics.get("wape") * 100 if val_metrics.get("wape") is not None else "N/A"}%
 
 ## Features
-- Numerical: {', '.join(c for c in feature_cols if c not in cat_cols)}
-- Categorical: {', '.join(cat_cols)}
+- Numerical: {", ".join(c for c in feature_cols if c not in cat_cols)}
+- Categorical: {", ".join(cat_cols)}
 """
     (output_dir / "model-card.md").write_text(card_content, encoding="utf-8")
 

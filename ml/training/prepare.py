@@ -19,7 +19,7 @@ if str(ROOT / "backend" / "src") not in sys.path:
 if str(ROOT / "ml" / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "ml" / "src"))
 
-from tram.domain.metro import Quarter
+from tram.domain.metro import Quarter  # noqa: E402
 
 
 def parse_bundle(bundle_dir: Path) -> tuple[dict, list[dict], list[dict], dict[str, int]]:
@@ -163,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error parsing bundle: {e}", file=sys.stderr)
         return 1
 
-    feature_rows = extract_features(series_list, quarters_records, entrances_count, metric=args.metric)
+    feature_rows = extract_features(
+        series_list, quarters_records, entrances_count, metric=args.metric
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     features_file = output_dir / "features.jsonl"
@@ -178,7 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     metadata = {
         "kind": "training_features_v1",
         "created_at": datetime.now(UTC).isoformat(),
-        "source_bundle": str(bundle_dir.relative_to(ROOT) if ROOT in bundle_dir.parents else bundle_dir),
+        "source_bundle": str(
+            bundle_dir.relative_to(ROOT) if ROOT in bundle_dir.parents else bundle_dir
+        ),
         "source_bundle_revision": manifest.get("revision"),
         "metric": args.metric,
         "feature_count": len(feature_rows),

@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 import urllib.error
 import urllib.parse
@@ -55,7 +54,10 @@ def cmd_import_mos(args: argparse.Namespace) -> int:
 
     dataset_id = str(args.dataset)
     if dataset_id not in ("624", "62743"):
-        print(f"Warning: Unexpected dataset ID '{dataset_id}', expected '624' or '62743'", file=sys.stderr)
+        print(
+            f"Warning: Unexpected dataset ID '{dataset_id}', expected '624' or '62743'",
+            file=sys.stderr,
+        )
 
     date_str = args.date or datetime.now(UTC).strftime("%Y-%m-%d")
     target_dir = SOURCES_DIR / "data-mos" / dataset_id / date_str
@@ -73,15 +75,21 @@ def cmd_import_mos(args: argparse.Namespace) -> int:
 
         with zipfile.ZipFile(dest_zip, "r") as zf:
             for member in zf.namelist():
-                if member.endswith(".json") and ("data-" in member or "data_" in member or member.startswith("data")):
+                if member.endswith(".json") and (
+                    "data-" in member or "data_" in member or member.startswith("data")
+                ):
                     extracted_path = target_dir / Path(member).name
                     extracted_path.write_bytes(zf.read(member))
                     extracted_data_file = extracted_path
-                    artifacts.append({"file": extracted_path.name, "sha256": sha256_file(extracted_path)})
+                    artifacts.append(
+                        {"file": extracted_path.name, "sha256": sha256_file(extracted_path)}
+                    )
                 elif member.endswith(".json"):
                     extracted_path = target_dir / Path(member).name
                     extracted_path.write_bytes(zf.read(member))
-                    artifacts.append({"file": extracted_path.name, "sha256": sha256_file(extracted_path)})
+                    artifacts.append(
+                        {"file": extracted_path.name, "sha256": sha256_file(extracted_path)}
+                    )
     else:
         # Single JSON file
         dest_file = target_dir / source_file.name
@@ -226,7 +234,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
                     continue
                 actual_sha = sha256_file(art_file)
                 if actual_sha != art["sha256"]:
-                    print(f"FAIL: SHA-256 mismatch in {art_file}: expected {art['sha256']}, got {actual_sha}")
+                    print(
+                        f"FAIL: SHA-256 mismatch in {art_file}: expected {art['sha256']}, got {actual_sha}"
+                    )
                     all_ok = False
                 else:
                     print(f"OK: {art_file.relative_to(ROOT)} (SHA-256 matches)")
@@ -242,8 +252,12 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # import-mos
-    p_mos = subparsers.add_parser("import-mos", help="Import downloaded 624/62743 ZIP/JSON and create provenance.json")
-    p_mos.add_argument("--dataset", required=True, choices=["624", "62743"], help="Dataset ID (624 or 62743)")
+    p_mos = subparsers.add_parser(
+        "import-mos", help="Import downloaded 624/62743 ZIP/JSON and create provenance.json"
+    )
+    p_mos.add_argument(
+        "--dataset", required=True, choices=["624", "62743"], help="Dataset ID (624 or 62743)"
+    )
     p_mos.add_argument("--file", required=True, help="Path to downloaded ZIP or JSON file")
     p_mos.add_argument("--version", help="Source version string (e.g. '6.8' or '1.35')")
     p_mos.add_argument("--date", help="Folder date (YYYY-MM-DD), defaults to today")

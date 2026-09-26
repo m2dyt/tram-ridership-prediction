@@ -16,29 +16,48 @@ Features:
 from __future__ import annotations
 
 import argparse
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
 # Russian 2025 official non-working holidays and transferred days
 HOLIDAYS_2025 = {
     # New Year holidays
-    "2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04",
-    "2025-01-05", "2025-01-06", "2025-01-07", "2025-01-08",
+    "2025-01-01",
+    "2025-01-02",
+    "2025-01-03",
+    "2025-01-04",
+    "2025-01-05",
+    "2025-01-06",
+    "2025-01-07",
+    "2025-01-08",
     # Defender of Fatherland
-    "2025-02-22", "2025-02-23",
+    "2025-02-22",
+    "2025-02-23",
     # International Women's Day
-    "2025-03-08", "2025-03-09",
+    "2025-03-08",
+    "2025-03-09",
     # Spring and Labor
-    "2025-05-01", "2025-05-02", "2025-05-03", "2025-05-04",
+    "2025-05-01",
+    "2025-05-02",
+    "2025-05-03",
+    "2025-05-04",
     # Victory Day
-    "2025-05-08", "2025-05-09", "2025-05-10", "2025-05-11",
+    "2025-05-08",
+    "2025-05-09",
+    "2025-05-10",
+    "2025-05-11",
     # Russia Day
-    "2025-06-12", "2025-06-13", "2025-06-14", "2025-06-15",
+    "2025-06-12",
+    "2025-06-13",
+    "2025-06-14",
+    "2025-06-15",
     # Unity Day
-    "2025-11-02", "2025-11-03", "2025-11-04",
+    "2025-11-02",
+    "2025-11-03",
+    "2025-11-04",
     # New Year Eve
     "2025-12-31",
 }
@@ -54,15 +73,21 @@ PRE_HOLIDAYS_2025 = {
 ALL_ROUTES = [1, 5, 7, 11, 12, 17, 25, 26, 28, 50]
 
 
-def generate_full_grid(start_date: str, end_date: str, routes: list[int] = ALL_ROUTES) -> pd.DataFrame:
+def generate_full_grid(
+    start_date: str, end_date: str, routes: list[int] = ALL_ROUTES
+) -> pd.DataFrame:
     """Generate a complete Cartesian grid of (date, hour, route) with all 24 hours."""
     dates = pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
     hours = list(range(24))
 
-    grid = pd.MultiIndex.from_product(
-        [dates, hours, routes],
-        names=["date", "hour", "route"],
-    ).to_frame().reset_index(drop=True)
+    grid = (
+        pd.MultiIndex.from_product(
+            [dates, hours, routes],
+            names=["date", "hour", "route"],
+        )
+        .to_frame()
+        .reset_index(drop=True)
+    )
 
     grid["route"] = grid["route"].astype(int)
     grid["hour"] = grid["hour"].astype(int)
@@ -132,9 +157,9 @@ def calculate_historical_profiles(train_df: pd.DataFrame) -> dict[str, pd.DataFr
             .rename(columns={"boardings": "hist_median_nonsummer_route_dow_hour"})
         )
     else:
-        prof_route_dow_hour_nonsummer = prof_route_dow_hour[["route", "dow_effective", "hour", "hist_median_route_dow_hour"]].rename(
-            columns={"hist_median_route_dow_hour": "hist_median_nonsummer_route_dow_hour"}
-        )
+        prof_route_dow_hour_nonsummer = prof_route_dow_hour[
+            ["route", "dow_effective", "hour", "hist_median_route_dow_hour"]
+        ].rename(columns={"hist_median_route_dow_hour": "hist_median_nonsummer_route_dow_hour"})
 
     # 3. Recent window profile (last 56 days / 8 weeks before the forecast cut-off)
     # For Sep-Oct val: this is July-August. For Nov-Dec final: this is Sep-Oct (autumn peak!).
@@ -208,11 +233,19 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
     """Attach computed historical profiles to any dataset (train, val, or test)."""
     df = df.copy()
 
-    df = df.merge(profiles["prof_route_dow_hour"], on=["route", "dow_effective", "hour"], how="left")
-    df = df.merge(profiles["prof_route_dow_hour_nonsummer"], on=["route", "dow_effective", "hour"], how="left")
-    df = df.merge(profiles["prof_route_dow_hour_recent"], on=["route", "dow_effective", "hour"], how="left")
+    df = df.merge(
+        profiles["prof_route_dow_hour"], on=["route", "dow_effective", "hour"], how="left"
+    )
+    df = df.merge(
+        profiles["prof_route_dow_hour_nonsummer"], on=["route", "dow_effective", "hour"], how="left"
+    )
+    df = df.merge(
+        profiles["prof_route_dow_hour_recent"], on=["route", "dow_effective", "hour"], how="left"
+    )
     df = df.merge(profiles["prof_night_q95"], on=["route", "hour"], how="left")
-    df = df.merge(profiles["prof_route_dayoff_hour"], on=["route", "is_day_off", "hour"], how="left")
+    df = df.merge(
+        profiles["prof_route_dayoff_hour"], on=["route", "is_day_off", "hour"], how="left"
+    )
     df = df.merge(profiles["prof_route_hour"], on=["route", "hour"], how="left")
     df = df.merge(profiles["prof_route"], on=["route"], how="left")
 
@@ -225,7 +258,8 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
     # Blended base profile: 70% recent + 30% long-term non-summer
     # (Captures current capacity and fleet while maintaining long-term stability)
     df["hist_median_blend_route_dow_hour"] = (
-        0.7 * df["hist_median_recent_route_dow_hour"] + 0.3 * df["hist_median_nonsummer_route_dow_hour"]
+        0.7 * df["hist_median_recent_route_dow_hour"]
+        + 0.3 * df["hist_median_nonsummer_route_dow_hour"]
     )
 
     # Physical transport network adjustments:
@@ -249,7 +283,7 @@ def attach_historical_profiles(df: pd.DataFrame, profiles: dict[str, pd.DataFram
     df.loc[mask_cold_work, "hist_median_nonsummer_route_dow_hour"] *= 1.04
 
     # For nocturnal hours where 95% of observations are 0:
-    mask_night_zero = (df["hist_q95_route_hour"] == 0)
+    mask_night_zero = df["hist_q95_route_hour"] == 0
     df.loc[mask_night_zero, "hist_median_nonsummer_route_dow_hour"] = 0.0
 
     df["ratio_recent_to_nonsummer"] = (df["hist_median_recent_route_dow_hour"] + 1.0) / (
@@ -280,10 +314,7 @@ def compute_wape_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, fl
     """Compute WAPE and official competition WAPE-score."""
     abs_errors = np.abs(y_true - y_pred)
     sum_y = np.sum(y_true)
-    if sum_y > 0:
-        wape = float(np.sum(abs_errors) / sum_y)
-    else:
-        wape = 0.0
+    wape = float(np.sum(abs_errors) / sum_y) if sum_y > 0 else 0.0
     wape_score = max(0.0, 1.0 - wape)
     mae = float(np.mean(abs_errors))
     return {
@@ -416,8 +447,8 @@ def train_and_evaluate(
     if model_type == "catboost":
         try:
             from catboost import CatBoostRegressor
-        except ImportError:
-            raise ImportError("Please install catboost: pip install catboost")
+        except ImportError as err:
+            raise ImportError("Please install catboost: pip install catboost") from err
 
         cb_params = {
             "loss_function": "MAE",
@@ -441,7 +472,7 @@ def train_and_evaluate(
             val_preds = np.zeros(len(val_feat))
             for r in active_routes:
                 mask_tr = (train_feat["route"] == r) & (train_feat["is_summer"] == 0)
-                mask_val = (val_feat["route"] == r)
+                mask_val = val_feat["route"] == r
                 X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
                 y_tr_r = y_train_fit[mask_tr]
                 X_val_r = val_feat.loc[mask_val, route_feat_cols]
@@ -449,14 +480,26 @@ def train_and_evaluate(
 
                 m_r = CatBoostRegressor(**cb_params)
                 try:
-                    m_r.fit(X_tr_r, y_tr_r, eval_set=(X_val_r, y_val_r), early_stopping_rounds=150, verbose=0)
-                except Exception as e:
+                    m_r.fit(
+                        X_tr_r,
+                        y_tr_r,
+                        eval_set=(X_val_r, y_val_r),
+                        early_stopping_rounds=150,
+                        verbose=0,
+                    )
+                except Exception:
                     # fallback to CPU if GPU fails for small route
                     cb_params_cpu = cb_params.copy()
                     cb_params_cpu["task_type"] = "CPU"
                     cb_params_cpu["thread_count"] = -1
                     m_r = CatBoostRegressor(**cb_params_cpu)
-                    m_r.fit(X_tr_r, y_tr_r, eval_set=(X_val_r, y_val_r), early_stopping_rounds=150, verbose=0)
+                    m_r.fit(
+                        X_tr_r,
+                        y_tr_r,
+                        eval_set=(X_val_r, y_val_r),
+                        early_stopping_rounds=150,
+                        verbose=0,
+                    )
 
                 raw_preds_r = m_r.predict(X_val_r)
                 if use_residual:
@@ -465,32 +508,52 @@ def train_and_evaluate(
                     val_preds[mask_val] = raw_preds_r
                 route_models[r] = m_r
                 r_wape = compute_wape_metrics(y_val[mask_val], val_preds[mask_val])
-                print(f"  Route {r:2d} finished: best_iter={m_r.get_best_iteration():4d}, WAPE={r_wape['wape']:.4f}, WAPE-score={r_wape['wape_score']:.4f}")
+                print(
+                    f"  Route {r:2d} finished: best_iter={m_r.get_best_iteration():4d}, WAPE={r_wape['wape']:.4f}, WAPE-score={r_wape['wape_score']:.4f}"
+                )
         else:
             if use_gpu:
                 try:
                     model = CatBoostRegressor(**cb_params)
-                    model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
-                except Exception as e:
+                    model.fit(
+                        X_train,
+                        y_train_fit,
+                        eval_set=(X_val, y_val_fit),
+                        early_stopping_rounds=100,
+                        verbose=200,
+                    )
+                except Exception:
                     cb_params["task_type"] = "CPU"
                     cb_params["thread_count"] = -1
                     model = CatBoostRegressor(**cb_params)
-                    model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+                    model.fit(
+                        X_train,
+                        y_train_fit,
+                        eval_set=(X_val, y_val_fit),
+                        early_stopping_rounds=100,
+                        verbose=200,
+                    )
             else:
                 model = CatBoostRegressor(**cb_params)
-                model.fit(X_train, y_train_fit, eval_set=(X_val, y_val_fit), early_stopping_rounds=100, verbose=200)
+                model.fit(
+                    X_train,
+                    y_train_fit,
+                    eval_set=(X_val, y_val_fit),
+                    early_stopping_rounds=100,
+                    verbose=200,
+                )
 
     elif model_type == "lightgbm":
         try:
             import lightgbm as lgb
-        except ImportError:
-            raise ImportError("Please install lightgbm: pip install lightgbm")
+        except ImportError as err:
+            raise ImportError("Please install lightgbm: pip install lightgbm") from err
 
         lgb_params = {
             "objective": "mae",
             "metric": "mae",
             "learning_rate": learning_rate,
-            "num_leaves": 2 ** depth - 1,
+            "num_leaves": 2**depth - 1,
             "random_state": 42,
             "verbose": -1,
         }
@@ -502,14 +565,16 @@ def train_and_evaluate(
             val_preds = np.zeros(len(val_feat))
             for r in active_routes:
                 mask_tr = (train_feat["route"] == r) & (train_feat["is_summer"] == 0)
-                mask_val = (val_feat["route"] == r)
+                mask_val = val_feat["route"] == r
                 X_tr_r = train_feat.loc[mask_tr, route_feat_cols]
                 y_tr_r = y_train_fit[mask_tr]
                 X_val_r = val_feat.loc[mask_val, route_feat_cols]
                 y_val_r = y_val_fit[mask_val]
 
                 dtrain = lgb.Dataset(X_tr_r, label=y_tr_r, categorical_feature=route_cat_features)
-                dval = lgb.Dataset(X_val_r, label=y_val_r, reference=dtrain, categorical_feature=route_cat_features)
+                dval = lgb.Dataset(
+                    X_val_r, label=y_val_r, reference=dtrain, categorical_feature=route_cat_features
+                )
 
                 m_r = lgb.train(
                     lgb_params,
@@ -526,7 +591,9 @@ def train_and_evaluate(
                 route_models[r] = m_r
         else:
             dtrain = lgb.Dataset(X_train, label=y_train_fit, categorical_feature=cat_features)
-            dval = lgb.Dataset(X_val, label=y_val_fit, reference=dtrain, categorical_feature=cat_features)
+            dval = lgb.Dataset(
+                X_val, label=y_val_fit, reference=dtrain, categorical_feature=cat_features
+            )
 
             model = lgb.train(
                 lgb_params,
@@ -541,6 +608,7 @@ def train_and_evaluate(
 
     elif model_type == "histgradient":
         from sklearn.ensemble import HistGradientBoostingRegressor
+
         print("Training Sklearn HistGradientBoostingRegressor with absolute_error (MAE) loss...")
         cat_indices = [feature_cols.index(c) for c in cat_features]
         model = HistGradientBoostingRegressor(
@@ -558,10 +626,7 @@ def train_and_evaluate(
         val_preds = base_val
     elif not per_route:
         raw_val_preds = model.predict(X_val)
-        if use_residual:
-            val_preds = base_val + raw_val_preds
-        else:
-            val_preds = raw_val_preds
+        val_preds = base_val + raw_val_preds if use_residual else raw_val_preds
 
     val_preds = np.clip(np.round(val_preds), 0, None)
     # Force route 5 to 0
@@ -570,7 +635,7 @@ def train_and_evaluate(
     val_metrics = compute_wape_metrics(y_val, val_preds)
     print("\n================ VALIDATION RESULTS (Sep-Oct 2025) ================")
     print(f"Overall MAE:        {val_metrics['mae']:.2f}")
-    print(f"Overall WAPE:       {val_metrics['wape']:.4f} ({val_metrics['wape']*100:.2f}%)")
+    print(f"Overall WAPE:       {val_metrics['wape']:.4f} ({val_metrics['wape'] * 100:.2f}%)")
     print(f"Overall WAPE-score: {val_metrics['wape_score']:.4f}")
     print("Baseline was ~0.48. Higher is better!")
     print("===================================================================\n")
@@ -582,7 +647,9 @@ def train_and_evaluate(
     for r in sorted(val_analysis["route"].unique()):
         sub_r = val_analysis[val_analysis["route"] == r]
         m = compute_wape_metrics(sub_r["boardings"].values, sub_r["pred"].values)
-        print(f"  Route {r:2d}: sum_y={int(sub_r['boardings'].sum()):8d}, WAPE={m['wape']:.4f}, WAPE-score={m['wape_score']:.4f}")
+        print(
+            f"  Route {r:2d}: sum_y={int(sub_r['boardings'].sum()):8d}, WAPE={m['wape']:.4f}, WAPE-score={m['wape_score']:.4f}"
+        )
 
     # Step 2: Full re-training on all 10 months (Jan-Oct) for final submission
     print("\n--- STAGE 2: FULL RE-TRAINING (Jan-Oct 2025) FOR SUBMISSION ---")
@@ -599,10 +666,7 @@ def train_and_evaluate(
     y_full = full_train_feat["boardings"].values
     X_sub = sub_feat[feature_cols]
 
-    if use_residual:
-        y_full_fit = y_full - base_full
-    else:
-        y_full_fit = y_full
+    y_full_fit = y_full - base_full if use_residual else y_full
 
     final_model = None
     sub_preds = np.zeros(len(sub_feat), dtype=int)
@@ -614,7 +678,7 @@ def train_and_evaluate(
         print("Fitting final per-route CatBoost models on full Jan-Oct history...")
         for r in active_routes:
             mask_full = (full_train_feat["route"] == r) & (full_train_feat["is_summer"] == 0)
-            mask_sub = (sub_feat["route"] == r)
+            mask_sub = sub_feat["route"] == r
             X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
             y_full_r = y_full_fit[mask_full]
             X_sub_r = sub_feat.loc[mask_sub, route_feat_cols]
@@ -638,7 +702,7 @@ def train_and_evaluate(
         print("Fitting final per-route LightGBM models on full Jan-Oct history...")
         for r in active_routes:
             mask_full = (full_train_feat["route"] == r) & (full_train_feat["is_summer"] == 0)
-            mask_sub = (sub_feat["route"] == r)
+            mask_sub = sub_feat["route"] == r
             X_full_r = full_train_feat.loc[mask_full, route_feat_cols]
             y_full_r = y_full_fit[mask_full]
             X_sub_r = sub_feat.loc[mask_sub, route_feat_cols]
@@ -667,6 +731,7 @@ def train_and_evaluate(
         sub_preds = (base_sub + raw_sub) if use_residual else raw_sub
     elif model_type == "histgradient":
         from sklearn.ensemble import HistGradientBoostingRegressor
+
         print("Training final Sklearn HistGradientBoostingRegressor on full data...")
         cat_indices = [feature_cols.index(c) for c in cat_features]
         final_model = HistGradientBoostingRegressor(
@@ -701,7 +766,7 @@ def train_and_evaluate(
     test_sub_path = data_dir / "test_submission.csv"
     if test_sub_path.is_file():
         ref = pd.read_csv(test_sub_path, sep=";")
-        print(f"\nVerification against baseline structure:")
+        print("\nVerification against baseline structure:")
         print(f"  Shape matches: {len(submission) == len(ref)}")
         print(f"  Columns match: {list(submission.columns) == list(ref.columns)}")
         print(f"  Total predicted passengers Nov-Dec: {submission['prediction'].sum():,}")
@@ -709,7 +774,9 @@ def train_and_evaluate(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train tram ridership prediction model with GPU support.")
+    parser = argparse.ArgumentParser(
+        description="Train tram ridership prediction model with GPU support."
+    )
     parser.add_argument(
         "--data-dir",
         type=Path,
