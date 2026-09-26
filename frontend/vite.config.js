@@ -18,4 +18,7 @@ export default defineConfig({
   },
   preview: { port: 4173, strictPort: true },
   build: { sourcemap: false },
+  optimizeDeps: {
+    exclude: ['maplibre-gl']
+  }
 });

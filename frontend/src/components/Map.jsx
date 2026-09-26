@@ -1,103 +1,99 @@
-import React, { useEffect, useRef } from "react";
-import L from "leaflet";
+import React, { useMemo } from "react";
+import MapLibreMap, { Source, Layer } from "@vis.gl/react-maplibre";
 import { number } from "../domain/format.js";
 
 const EMPTY_CONTEXT = [];
 
 export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
-  const root = useRef(),
-    map = useRef(),
-    layers = useRef();
-  useEffect(() => {
-    map.current = L.map(root.current, { scrollWheelZoom: false }).setView(
-      [55.757, 37.628],
-      13,
-    );
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map.current);
-    layers.current = L.featureGroup().addTo(map.current);
-    const observer = new ResizeObserver(() => map.current?.invalidateSize());
-    observer.observe(root.current);
-    return () => {
-      observer.disconnect();
-      map.current.remove();
-      map.current = null;
-    };
-  }, []);
-  useEffect(() => {
-    const group = layers.current;
-    group.clearLayers();
-    const popup = (title, detail) => {
-      const el = document.createElement("div");
-      const b = document.createElement("strong");
-      b.textContent = title;
-      el.append(
-        b,
-        document.createElement("br"),
-        document.createTextNode(detail),
-      );
-      return el;
-    };
+  // Конвертируем маршруты в GeoJSON для отрисовки линий
+  const routeFeatures = useMemo(() => {
+    const features = [];
     route?.directions?.forEach((d) => {
-      if (d.geometry)
-        L.geoJSON(d.geometry, {
-          style: { color: "#95b6b3", weight: 6, opacity: 0.7 },
-        }).addTo(group);
+      if (d.geometry) {
+        features.push({
+          type: "Feature",
+          geometry: d.geometry,
+          properties: { id: d.id || Math.random().toString() },
+        });
+      }
     });
+    return { type: "FeatureCollection", features };
+  }, [route]);
+
+  // Конвертируем остановки в GeoJSON для отрисовки точек
+  const stopFeatures = useMemo(() => {
+    const features = [];
     route?.stops?.forEach((s) => {
-      if (s.geometry)
-        L.circleMarker([...s.geometry.coordinates].reverse(), {
-          radius: 5,
-          color: "#102b34",
-          fillColor: "#fff",
-          fillOpacity: 1,
-          weight: 2,
-        })
-          .bindPopup(popup(s.name, s.id))
-          .addTo(group);
+      if (s.geometry) {
+        features.push({
+          type: "Feature",
+          geometry: s.geometry,
+          properties: { name: s.name, id: s.id },
+        });
+      }
     });
-    forecast?.features?.forEach((f) => {
-      if (f.geometry)
-        L.geoJSON(f, {
-          style: {
-            color: f.properties.value == null ? "#999" : "#128a85",
-            weight: 7,
-          },
-          pointToLayer: (f, latlng) =>
-            L.circleMarker(latlng, { radius: 8, color: "#128a85" }),
-        })
-          .bindPopup(popup("Прогноз", number(f.properties.value)))
-          .addTo(group);
-    });
-    context.forEach((p) => {
-      if (p.coordinates)
-        L.circleMarker([...p.coordinates].reverse(), {
-          radius: 6,
-          color: "#cc7a32",
-          fillOpacity: 0.75,
-        })
-          .bindPopup(popup(p.title, p.category || "Мероприятие"))
-          .addTo(group);
-    });
-    if (group.getLayers().length && group.getBounds().isValid())
-      map.current.fitBounds(group.getBounds(), {
-        padding: [35, 35],
-        maxZoom: 14,
-      });
-  }, [route, forecast, context]);
+    return { type: "FeatureCollection", features };
+  }, [route]);
+
   return (
-    <div className="map-shell">
-      <div
-        ref={root}
-        className="map"
-        aria-label="Карта маршрута OpenStreetMap"
-      />
-      <div className="map-key">
-        <i /> Маршрут <i className="dot" /> Остановка <i className="orange" />{" "}
-        Объект города
+    <div className="map-shell" style={{ height: "400px", width: "100%", position: "relative" }}>
+      <MapLibreMap
+        initialViewState={{
+          longitude: 37.628,
+          latitude: 55.757,
+          zoom: 11,
+        }}
+        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        interactive={true}
+      >
+        {/* Линии маршрута */}
+        <Source id="route-source" type="geojson" data={routeFeatures}>
+          <Layer
+            id="route-layer"
+            type="line"
+            paint={{
+              "line-color": "#e30b13", // Цвет МосТранс
+              "line-width": 4,
+              "line-opacity": 0.7,
+            }}
+          />
+        </Source>
+
+        {/* Остановки */}
+        <Source id="stops-source" type="geojson" data={stopFeatures}>
+          <Layer
+            id="stops-layer"
+            type="circle"
+            paint={{
+              "circle-radius": 5,
+              "circle-color": "#ffffff",
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#e30b13",
+            }}
+          />
+        </Source>
+
+        {/* Прогноз (дополнительные слои) */}
+        {forecast?.features && (
+          <Source id="forecast-source" type="geojson" data={forecast}>
+            <Layer
+              id="forecast-layer"
+              type="circle"
+              paint={{
+                "circle-radius": 8,
+                "circle-color": "#128a85",
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#ffffff",
+              }}
+            />
+          </Source>
+        )}
+      </MapLibreMap>
+
+      <div className="map-key" style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", padding: "5px", borderRadius: "5px" }}>
+        <i style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#e30b13", marginRight: "5px" }} /> Маршрут 
+        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", border: "2px solid #e30b13", marginLeft: "10px", marginRight: "5px" }} /> Остановка 
+        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#cc7a32", marginLeft: "10px", marginRight: "5px" }} /> Объект города
       </div>
     </div>
   );

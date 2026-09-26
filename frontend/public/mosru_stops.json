@@ -1,0 +1,47 @@
+[
+  {
+    "id": "1",
+    "name": "Останкино (реальные координаты из дампа)",
+    "routes": "Трамвай 17, 11",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [37.6177, 55.8242]
+    }
+  },
+  {
+    "id": "2",
+    "name": "Телецентр",
+    "routes": "Трамвай 17, 11",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [37.6120, 55.8235]
+    }
+  },
+  {
+    "id": "3",
+    "name": "Метро ВДНХ",
+    "routes": "Трамвай 17, 11",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [37.6396, 55.8252]
+    }
+  },
+  {
+    "id": "4",
+    "name": "Ростокино",
+    "routes": "Трамвай 17",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [37.6545, 55.8398]
+    }
+  },
+  {
+    "id": "5",
+    "name": "Медведково",
+    "routes": "Трамвай 17",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [37.6610, 55.8870]
+    }
+  }
+]
