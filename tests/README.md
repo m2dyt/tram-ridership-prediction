@@ -34,4 +34,6 @@
 | [test_submission_validation.py](test_submission_validation.py) | Строгая валидация конкурсных сабмитов (14640 строк, 10 маршрутов, нулевой маршрут 5). |
 | [test_tram_training_modules.py](test_tram_training_modules.py) | Модули обучения трамвая: сетка, профили, метрика WAPE-score, CatBoost/HistGradientBoosting модели. |
 | [test_weather_and_calendar.py](test_weather_and_calendar.py) | Пайплайны внешних данных: погода 2025 (Open-Meteo) и официальный календарь РФ 2025. |
+| [test_tram_data.py](test_tram_data.py) | Проверка схем данных, семантики нуля/пропусков, первичных ключей, временных сплитов и манифеста. |
+
 
