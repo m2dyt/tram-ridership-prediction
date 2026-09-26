@@ -16,8 +16,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 REQUIRED_COLUMNS = ["route", "date", "hour", "prediction"]
 EXPECTED_ROUTES = {1, 5, 7, 11, 12, 17, 25, 26, 28, 50}
@@ -44,7 +45,7 @@ def validate_submission(
         raise ValidationError(f"File not found: {file_path}")
 
     # 1. Delimiter check
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         first_line = f.readline().strip()
         if ";" not in first_line:
             errors.append(f"Header delimiter is not ';': '{first_line}'")
@@ -93,12 +94,11 @@ def validate_submission(
 
     # 6. Check dates
     dates_found = sorted(df["date"].unique())
-    expected_date_range = [
-        d.strftime("%Y-%m-%d")
-        for d in pd.date_range(START_DATE, END_DATE)
-    ]
+    expected_date_range = [d.strftime("%Y-%m-%d") for d in pd.date_range(START_DATE, END_DATE)]
     if dates_found != expected_date_range:
-        errors.append(f"Date range mismatch: expected {len(expected_date_range)} days ({START_DATE} to {END_DATE}), got {len(dates_found)} days")
+        errors.append(
+            f"Date range mismatch: expected {len(expected_date_range)} days ({START_DATE} to {END_DATE}), got {len(dates_found)} days"
+        )
 
     # 7. Check key duplicates
     duplicates = df.duplicated(subset=["route", "date", "hour"]).sum()
@@ -110,7 +110,9 @@ def validate_submission(
     if len(route_5) > 0:
         route_5_non_zero = (route_5["prediction"] != 0).sum()
         if route_5_non_zero > 0:
-            errors.append(f"Route 5 rule violated: {route_5_non_zero} rows have non-zero predictions (must all be 0)")
+            errors.append(
+                f"Route 5 rule violated: {route_5_non_zero} rows have non-zero predictions (must all be 0)"
+            )
 
     # 9. Check non-negativity and finiteness
     negatives = (df["prediction"] < 0).sum()
@@ -163,15 +165,15 @@ def validate_submission(
     # 11. Baseline comparison check if provided
     if baseline_path and baseline_path.is_file():
         base_df = pd.read_csv(baseline_path, sep=";")
-        merged = df.merge(
-            base_df,
-            on=["route", "date", "hour"],
-            suffixes=("_new", "_base")
-        )
+        merged = df.merge(base_df, on=["route", "date", "hour"], suffixes=("_new", "_base"))
         if len(merged) == EXPECTED_ROWS:
             abs_diff = (merged["prediction_new"] - merged["prediction_base"]).abs()
             mae_vs_base = float(abs_diff.mean())
-            wape_vs_base = float(abs_diff.sum() / merged["prediction_base"].sum()) if merged["prediction_base"].sum() > 0 else 0.0
+            wape_vs_base = (
+                float(abs_diff.sum() / merged["prediction_base"].sum())
+                if merged["prediction_base"].sum() > 0
+                else 0.0
+            )
             stats["comparison_vs_baseline"] = {
                 "baseline_total_passengers": int(merged["prediction_base"].sum()),
                 "total_difference": int(df["prediction"].sum() - merged["prediction_base"].sum()),

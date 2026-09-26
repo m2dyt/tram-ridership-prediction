@@ -1,18 +1,17 @@
 """Unit tests for model bundle export, loading, verification, and tamper detection."""
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
-import numpy as np
+
 import pandas as pd
 
 from ml.training.tram.bundle import (
     BundleError,
     ChecksumMismatchError,
     export_model_bundle,
-    load_model_bundle,
     get_active_version,
+    load_model_bundle,
     set_active_version,
 )
 from ml.training.tram.features import generate_full_grid

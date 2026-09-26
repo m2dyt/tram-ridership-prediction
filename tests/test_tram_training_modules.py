@@ -1,23 +1,22 @@
 """Unit tests for modular tram training components (ml/training/tram/)."""
 
 import unittest
+
 import numpy as np
 import pandas as pd
 
-from ml.training.tram.features import (
-    ALL_ROUTES,
-    generate_full_grid,
-    add_calendar_features,
-)
 from ml.training.tram.baseline import (
-    calculate_historical_profiles,
-    attach_historical_profiles,
-    predict_seasonal_baseline,
     BASE_PROFILE_COL,
+    attach_historical_profiles,
+    calculate_historical_profiles,
+    predict_seasonal_baseline,
 )
 from ml.training.tram.evaluation import (
     compute_wape_metrics,
-    evaluate_by_route,
+)
+from ml.training.tram.features import (
+    add_calendar_features,
+    generate_full_grid,
 )
 from ml.training.tram.submission import format_submission
 
@@ -38,7 +37,7 @@ class TestTramTrainingModules(unittest.TestCase):
         df = pd.DataFrame(
             [
                 {"date": "2025-01-01", "hour": 12, "route": 1},  # New Year holiday
-                {"date": "2025-01-15", "hour": 8, "route": 1},   # Regular Wednesday workday
+                {"date": "2025-01-15", "hour": 8, "route": 1},  # Regular Wednesday workday
                 {"date": "2025-11-01", "hour": 18, "route": 1},  # Working Saturday (pre-holiday)
             ]
         )

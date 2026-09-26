@@ -11,10 +11,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+
 import pandas as pd
 
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
@@ -105,7 +105,9 @@ def fetch_weather(
         is_freezing = 1 if (temp is not None and temp < 0.0) else 0
         is_precipitation = 1 if (prec is not None and prec > 0.0) else 0
         # WMO Snow codes: 71, 73, 75 (slight/mod/heavy snow), 77 (snow grains), 85, 86 (snow showers)
-        is_snow = 1 if ((snow is not None and snow > 0.0) or (code in [71, 73, 75, 77, 85, 86])) else 0
+        is_snow = (
+            1 if ((snow is not None and snow > 0.0) or (code in [71, 73, 75, 77, 85, 86])) else 0
+        )
         is_heavy_snow = 1 if ((snow is not None and snow >= 0.5) or (code in [75, 86])) else 0
 
         records.append(
@@ -142,7 +144,9 @@ def fetch_weather(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download and normalize Moscow 2025 weather from Open-Meteo.")
+    parser = argparse.ArgumentParser(
+        description="Download and normalize Moscow 2025 weather from Open-Meteo."
+    )
     parser.add_argument("--force", action="store_true", help="Force redownload even if cached")
     args = parser.parse_args()
 

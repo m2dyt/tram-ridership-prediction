@@ -11,17 +11,18 @@ Supports:
 from __future__ import annotations
 
 from typing import Any
+
 import numpy as np
 import pandas as pd
 
+from ml.training.tram.evaluation import compute_wape_metrics
 from ml.training.tram.features import (
     ACTIVE_ROUTES,
-    FEATURE_COLS,
     CATEGORICAL_FEATURES,
-    ROUTE_FEATURE_COLS,
+    FEATURE_COLS,
     ROUTE_CAT_FEATURES,
+    ROUTE_FEATURE_COLS,
 )
-from ml.training.tram.evaluation import compute_wape_metrics
 
 
 def train_validation_models(
@@ -194,10 +195,14 @@ def train_validation_models(
                     callbacks=[lgb.early_stopping(stopping_rounds=100, verbose=False)],
                 )
                 raw_preds_r = m_r.predict(X_val_r)
-                val_preds[mask_val] = (base_val[mask_val] + raw_preds_r) if use_residual else raw_preds_r
+                val_preds[mask_val] = (
+                    (base_val[mask_val] + raw_preds_r) if use_residual else raw_preds_r
+                )
                 route_models[r] = m_r
         else:
-            dtrain = lgb.Dataset(X_train, label=y_train_fit, categorical_feature=CATEGORICAL_FEATURES)
+            dtrain = lgb.Dataset(
+                X_train, label=y_train_fit, categorical_feature=CATEGORICAL_FEATURES
+            )
             dval = lgb.Dataset(
                 X_val, label=y_val_fit, reference=dtrain, categorical_feature=CATEGORICAL_FEATURES
             )

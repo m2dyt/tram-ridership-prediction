@@ -104,7 +104,9 @@ def audit_and_prepare(
         validate_labels_df(df_train, expected_split="train")
         train_rep = generate_quality_report(df_train, split_name="train")
         quality_reports["train"] = train_rep
-        print(f"  [OK] Train labels valid: {train_rep['total_rows']} rows, {train_rep['total_boardings']} boardings")
+        print(
+            f"  [OK] Train labels valid: {train_rep['total_rows']} rows, {train_rep['total_boardings']} boardings"
+        )
 
     if val_labels_p.is_file():
         print("  Validating labels_day_test.csv schema and constraints...")
@@ -112,12 +114,16 @@ def audit_and_prepare(
         validate_labels_df(df_val, expected_split="validation")
         val_rep = generate_quality_report(df_val, split_name="validation")
         quality_reports["validation"] = val_rep
-        print(f"  [OK] Validation labels valid: {val_rep['total_rows']} rows, {val_rep['total_boardings']} boardings")
+        print(
+            f"  [OK] Validation labels valid: {val_rep['total_rows']} rows, {val_rep['total_boardings']} boardings"
+        )
 
     if sub_sample_p.is_file():
         print("  Checking test_submission.csv sample format...")
         df_sub = pd.read_csv(sub_sample_p, sep=";")
-        assert len(df_sub) == 14640, f"Expected 14640 rows in test_submission.csv, found {len(df_sub)}"
+        assert len(df_sub) == 14640, (
+            f"Expected 14640 rows in test_submission.csv, found {len(df_sub)}"
+        )
         assert list(df_sub.columns) == ["route", "date", "hour", "prediction"]
         print(f"  [OK] Submission sample valid: {len(df_sub)} rows covering 10 routes")
 
@@ -192,10 +198,24 @@ def audit_and_prepare(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare and audit tram competition datasets")
-    parser.add_argument("--dataset-dir", type=Path, default=Path("dataset"), help="Path to raw dataset directory")
-    parser.add_argument("--sources-dir", type=Path, default=Path("sources/tram-competition-2025"), help="Path to sources dir")
-    parser.add_argument("--output-dir", type=Path, default=Path("data/training/tram-competition-v1"), help="Manifest output dir")
-    parser.add_argument("--quick", action="store_true", help="Skip SHA-256 for multi-gigabyte raw files")
+    parser.add_argument(
+        "--dataset-dir", type=Path, default=Path("dataset"), help="Path to raw dataset directory"
+    )
+    parser.add_argument(
+        "--sources-dir",
+        type=Path,
+        default=Path("sources/tram-competition-2025"),
+        help="Path to sources dir",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/training/tram-competition-v1"),
+        help="Manifest output dir",
+    )
+    parser.add_argument(
+        "--quick", action="store_true", help="Skip SHA-256 for multi-gigabyte raw files"
+    )
     args = parser.parse_args()
 
     audit_and_prepare(

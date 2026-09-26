@@ -8,7 +8,7 @@ import pandas as pd
 
 def compute_wape_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Compute WAPE, competition WAPE-score, and MAE.
-    
+
     WAPE = sum(|y - y_pred|) / sum(y)
     WAPE-score = max(0.0, 1.0 - WAPE)
     """

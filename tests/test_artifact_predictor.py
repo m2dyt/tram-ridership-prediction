@@ -7,6 +7,7 @@ from pathlib import Path
 from tram.domain.series import SpatialKey, SpatialLevel
 from tram.domain.time import Horizon, Interval, Resolution, aware
 from tram.infrastructure.ml.artifact_predictor import ArtifactPredictor
+
 try:
     from tram_ml.baseline import SeasonalNaive
 except ImportError:

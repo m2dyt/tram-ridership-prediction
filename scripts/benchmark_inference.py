@@ -101,9 +101,7 @@ def benchmark_predictor_scenario(
     history: tuple = (),
     warmup: int = 2,
 ) -> dict:
-    series = tuple(
-        SpatialKey(level=SpatialLevel.ROUTE, route_id=r) for r in route_ids
-    )
+    series = tuple(SpatialKey(level=SpatialLevel.ROUTE, route_id=r) for r in route_ids)
     # Start at Moscow midnight
     start = aware(datetime(2025, 11, 1, 0, 0, tzinfo=MOSCOW))
     end = start + timedelta(hours=hours)
@@ -168,9 +166,7 @@ def benchmark_predictor_scenario(
 
     stats = calculate_quantiles(latencies_ms)
     points_per_sec = (
-        round(total_points * (1000.0 / stats["mean_ms"]), 1)
-        if stats["mean_ms"] > 0
-        else 0.0
+        round(total_points * (1000.0 / stats["mean_ms"]), 1) if stats["mean_ms"] > 0 else 0.0
     )
 
     return {
@@ -236,7 +232,11 @@ def run_benchmark(
         {"name": "24h_SingleRoute", "routes": ["17"], "hours": 24},
         {"name": "24h_MultiRoute", "routes": ["1", "17", "25", "38"], "hours": 24},
         {"name": "168h_Week_MultiRoute", "routes": ["1", "17", "25", "38"], "hours": 168},
-        {"name": "60d_Full_AllRoutes", "routes": ["1", "5", "7", "11", "12", "17", "25", "26", "28", "38"], "hours": 1464},
+        {
+            "name": "60d_Full_AllRoutes",
+            "routes": ["1", "5", "7", "11", "12", "17", "25", "26", "28", "38"],
+            "hours": 1464,
+        },
     ]
 
     results: dict = {
@@ -292,7 +292,9 @@ def run_benchmark(
                 p99 = f"{m['p99_ms']:.2f}"
                 rps = f"{m['rps']:.1f}"
                 pts = f"{bench_res['points_per_sec']:.0f}"
-                print(f"{pred_name:<18} | {scen_name:<20} | {p50:<8} | {p95:<8} | {p99:<8} | {rps:<7} | {pts:<9}")
+                print(
+                    f"{pred_name:<18} | {scen_name:<20} | {p50:<8} | {p95:<8} | {p99:<8} | {rps:<7} | {pts:<9}"
+                )
 
     if not quiet:
         print("=" * 82)
@@ -312,10 +314,21 @@ def run_benchmark(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tram Predictor Latency & Throughput Benchmark")
-    parser.add_argument("--iterations", "-n", type=int, default=10, help="Number of benchmark iterations")
-    parser.add_argument("--version", type=str, default=None, help="Model version to test (defaults to active version)")
-    parser.add_argument("--models-root", type=Path, default=Path("models/tram"), help="Root models directory")
-    parser.add_argument("--output", "-o", type=Path, default=Path("benchmarks/latest.json"), help="Output JSON path")
+    parser.add_argument(
+        "--iterations", "-n", type=int, default=10, help="Number of benchmark iterations"
+    )
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="Model version to test (defaults to active version)",
+    )
+    parser.add_argument(
+        "--models-root", type=Path, default=Path("models/tram"), help="Root models directory"
+    )
+    parser.add_argument(
+        "--output", "-o", type=Path, default=Path("benchmarks/latest.json"), help="Output JSON path"
+    )
     parser.add_argument("--quiet", "-q", action="store_true", help="Quiet mode (no console table)")
     args = parser.parse_args()
 

@@ -16,15 +16,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
 
-from ml.training.tram.baseline import attach_historical_profiles, BASE_PROFILE_COL
+from ml.training.tram.baseline import BASE_PROFILE_COL, attach_historical_profiles
 from ml.training.tram.features import (
     ACTIVE_ROUTES,
-    FEATURE_COLS,
     CATEGORICAL_FEATURES,
+    FEATURE_COLS,
     ROUTE_CAT_FEATURES,
 )
 
@@ -82,6 +83,7 @@ class TramModelBundle:
         # 1. Add calendar features if missing
         if "dow_effective" not in df_feat.columns:
             from ml.training.tram.features import add_calendar_features
+
             df_feat = add_calendar_features(df_feat)
 
         # 2. Attach historical profiles if not already attached
@@ -106,7 +108,9 @@ class TramModelBundle:
                     m_r = self.models[r]
                     X_r = df_feat.loc[mask_r, active_route_features]
                     raw_preds = m_r.predict(X_r)
-                    preds[mask_r] = (base_vals[mask_r] + raw_preds) if self.use_residual else raw_preds
+                    preds[mask_r] = (
+                        (base_vals[mask_r] + raw_preds) if self.use_residual else raw_preds
+                    )
                 else:
                     preds[mask_r] = base_vals[mask_r]
         else:
@@ -197,16 +201,16 @@ def export_model_bundle(
 
 ## Overview
 * **Version:** `{version}`
-* **Created:** {manifest['created_at']}
-* **Git Commit:** `{manifest['git_commit'] or 'N/A'}`
-* **Model Type:** `{config.get('model_type', 'unknown')}`
-* **Residual Learning:** `{config.get('use_residual', True)}`
-* **Per Route Models:** `{config.get('per_route', True)}`
+* **Created:** {manifest["created_at"]}
+* **Git Commit:** `{manifest["git_commit"] or "N/A"}`
+* **Model Type:** `{config.get("model_type", "unknown")}`
+* **Residual Learning:** `{config.get("use_residual", True)}`
+* **Per Route Models:** `{config.get("per_route", True)}`
 
 ## Performance (Sep-Oct 2025 Validation)
-* **Overall WAPE:** `{metrics.get('wape', 0.0):.4f}` ({metrics.get('wape', 0.0) * 100:.2f}%)
-* **Overall WAPE-score:** `{metrics.get('wape_score', 0.0):.4f}`
-* **Overall MAE:** `{metrics.get('mae', 0.0):.2f}`
+* **Overall WAPE:** `{metrics.get("wape", 0.0):.4f}` ({metrics.get("wape", 0.0) * 100:.2f}%)
+* **Overall WAPE-score:** `{metrics.get("wape_score", 0.0):.4f}`
+* **Overall MAE:** `{metrics.get("mae", 0.0):.2f}`
 
 ## Artifacts
 * `estimator.joblib` (SHA-256: `{estimator_hash}`)
@@ -259,7 +263,9 @@ def load_model_bundle(
 
     # Load artifacts
     estimator_data = joblib.load(estimator_file)
-    features_spec = json.loads(features_file.read_text(encoding="utf-8")) if features_file.is_file() else {}
+    features_spec = (
+        json.loads(features_file.read_text(encoding="utf-8")) if features_file.is_file() else {}
+    )
     config = json.loads(config_file.read_text(encoding="utf-8")) if config_file.is_file() else {}
     metrics = json.loads(metrics_file.read_text(encoding="utf-8")) if metrics_file.is_file() else {}
 

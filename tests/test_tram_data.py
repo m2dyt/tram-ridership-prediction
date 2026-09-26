@@ -18,12 +18,14 @@ from ml.training.tram_data import (
 
 class TestTramData(unittest.TestCase):
     def setUp(self):
-        self.valid_train_df = pd.DataFrame({
-            "route": [1, 1, 17],
-            "date": ["2025-01-01", "2025-01-01", "2025-02-15"],
-            "hour": [8, 9, 12],
-            "boardings": [100, 150, 320],
-        })
+        self.valid_train_df = pd.DataFrame(
+            {
+                "route": [1, 1, 17],
+                "date": ["2025-01-01", "2025-01-01", "2025-02-15"],
+                "hour": [8, 9, 12],
+                "boardings": [100, 150, 320],
+            }
+        )
 
     def test_valid_dataframe_passes(self):
         # Should not raise
@@ -59,23 +61,27 @@ class TestTramData(unittest.TestCase):
             validate_labels_df(bad_df)
 
     def test_duplicate_primary_key_raises_invalid_key_error(self):
-        dup_df = pd.DataFrame({
-            "route": [1, 1],
-            "date": ["2025-01-01", "2025-01-01"],
-            "hour": [8, 8],
-            "boardings": [100, 105],
-        })
+        dup_df = pd.DataFrame(
+            {
+                "route": [1, 1],
+                "date": ["2025-01-01", "2025-01-01"],
+                "hour": [8, 8],
+                "boardings": [100, 105],
+            }
+        )
         with self.assertRaises(InvalidKeyError):
             validate_labels_df(dup_df)
 
     def test_temporal_overlap_raises_error(self):
         # Train split only allows 2025-01-01 to 2025-08-31
-        leak_df = pd.DataFrame({
-            "route": [1],
-            "date": ["2025-09-15"],  # September leaked into train
-            "hour": [10],
-            "boardings": [200],
-        })
+        leak_df = pd.DataFrame(
+            {
+                "route": [1],
+                "date": ["2025-09-15"],  # September leaked into train
+                "hour": [10],
+                "boardings": [200],
+            }
+        )
         with self.assertRaises(TemporalOverlapError):
             validate_labels_df(leak_df, expected_split="train")
 
@@ -91,8 +97,12 @@ class TestTramData(unittest.TestCase):
         manifest_p = Path("data/training/tram-competition-v1/manifest.json")
         provenance_p = Path("sources/tram-competition-2025/provenance.json")
 
-        self.assertTrue(manifest_p.is_file(), "data/training/tram-competition-v1/manifest.json is missing")
-        self.assertTrue(provenance_p.is_file(), "sources/tram-competition-2025/provenance.json is missing")
+        self.assertTrue(
+            manifest_p.is_file(), "data/training/tram-competition-v1/manifest.json is missing"
+        )
+        self.assertTrue(
+            provenance_p.is_file(), "sources/tram-competition-2025/provenance.json is missing"
+        )
 
         with manifest_p.open("r", encoding="utf-8") as f:
             manifest = json.load(f)

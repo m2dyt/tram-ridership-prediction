@@ -6,8 +6,14 @@ import logging
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
+
 import pandas as pd
 
+from ml.training.tram.bundle import (
+    TramModelBundle,
+    get_active_version,
+    load_model_bundle,
+)
 from tram.application.ports import Predictor
 from tram.domain.series import Observation, Prediction, SpatialKey
 from tram.domain.time import (
@@ -17,11 +23,6 @@ from tram.domain.time import (
     Resolution,
     aware,
     intervals,
-)
-from ml.training.tram.bundle import (
-    TramModelBundle,
-    load_model_bundle,
-    get_active_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,9 @@ class ArtifactPredictor:
                 routes.append((s, r_int))
             except ValueError:
                 if self.fallback:
-                    return self.fallback.predict(history, series, window, horizon, resolution, as_of)
+                    return self.fallback.predict(
+                        history, series, window, horizon, resolution, as_of
+                    )
                 raise
 
         window_intervals = list(intervals(window, resolution))
