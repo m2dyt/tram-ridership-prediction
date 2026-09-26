@@ -22,8 +22,16 @@ class RunWorker:
             return False
         run, token = claim["run"], claim["lease_token"]
         try:
-            if run["model"]["method"] != "seasonal_naive_v1":
-                raise ApplicationError("MODEL_UNAVAILABLE", "Worker does not support this model")
+            supported = {
+                "seasonal_naive_v1",
+                "active_bundle",
+                getattr(self.predictor, "method", None),
+            }
+            if run["model"]["method"] not in supported:
+                raise ApplicationError(
+                    "MODEL_UNAVAILABLE",
+                    f"Worker does not support this model: {run['model']['method']}",
+                )
             profile = run["profile"]
             series = self.repository.series(
                 run["dataset_revision_id"], profile["observation_profile_id"], run["route_ids"]

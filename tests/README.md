@@ -28,3 +28,10 @@
 | [test_postgres.py](test_postgres.py) | Реальная конкурентность PostgreSQL: публикация, идемпотентность, SKIP LOCKED, fencing и события рейса. |
 | [test_publication.py](test_publication.py) | Атомарная публикация, повторы/ошибки/откат, demo и все горизонты. |
 | [test_repository.py](test_repository.py) | SQL-проекции, очереди, фильтры, временная валидность сети и пагинация. |
+| [test_artifact_predictor.py](test_artifact_predictor.py) | Инфраструктурный адаптер ArtifactPredictor: загрузка активного бандла, инференс и fallback на SeasonalNaive. |
+| [test_benchmark.py](test_benchmark.py) | Проверка скрипта бенчмарка инференса, квантилей p50/p95/p99, RPS и генерации JSON отчёта. |
+| [test_model_bundle.py](test_model_bundle.py) | Сериализация, валидация контрольных сумм SHA-256 и защита бандлов моделей от повреждения. |
+| [test_submission_validation.py](test_submission_validation.py) | Строгая валидация конкурсных сабмитов (14640 строк, 10 маршрутов, нулевой маршрут 5). |
+| [test_tram_training_modules.py](test_tram_training_modules.py) | Модули обучения трамвая: сетка, профили, метрика WAPE-score, CatBoost/HistGradientBoosting модели. |
+| [test_weather_and_calendar.py](test_weather_and_calendar.py) | Пайплайны внешних данных: погода 2025 (Open-Meteo) и официальный календарь РФ 2025. |
+

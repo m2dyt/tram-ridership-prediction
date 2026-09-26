@@ -90,3 +90,49 @@ profile_id,level,route_id,direction_id,stop_id,stop_sequence,segment_id,interval
 ## Выпуск транспорта
 
 Калькулятор находится в «Наполненность» и `POST /scenarios/fleet`. Формулы: `headway = 60 × capacity × target_ratio / passengers_per_hour`, `vehicles = ceil(round_trip_minutes / headway)`. При нулевом спросе вагонов 0, интервал `null`. Вводится поток через самый загруженный участок одного направления, одинаковые вагоны, полный оборот с отстоем и доступный резерв. Это сравнение сценария с резервом, без автоматического изменения выпуска и оптимизации расписания.
+
+## Управление ML-моделями и версионирование
+
+Модели упаковываются в неизменяемые версионированные бандлы в `models/tram/<version>/`:
+
+```powershell
+# 1. Обучение и экспорт бандла (baseline, histgradient, catboost)
+python ml/training/train_tram.py --model baseline
+
+# 2. Выбор активной версии для backend worker
+Set-Content models/tram/active_version.txt "baseline_v1"
+
+# 3. Запуск воркера (автоматически подхватит active_version через ArtifactPredictor)
+python -m tram.cli worker --once
+```
+
+Каждый бандл содержит `manifest.json`, `checksums.json`, веса моделей (`models.joblib` / `profiles.joblib`), `model_card.md` и `environment.json`. При загрузке `ArtifactPredictor` валидирует контрольные суммы SHA-256. В случае повреждения или отсутствия бандла происходит автоматический fallback на `SeasonalNaive`.
+
+## Валидация конкурсного сабмита
+
+```powershell
+python scripts/validate_submission.py ml/predictions/submission.csv
+```
+
+Проверяет:
+- Точный размер сетки: 14 640 строк.
+- Все 10 обязательных маршрутов (1, 5, 7, 11, 12, 17, 25, 26, 28, 38).
+- Маршрут 5 строго равен 0 (требование организаторов).
+- Формат CSV: разделитель `;`, колонки `route;date;hour;prediction`.
+- Отсутствие `NaN`, `Inf`, отрицательных значений и пропусков дат/часов.
+- Сравнение метрик расхождения с замороженным эталоном `ml/predictions/baseline/submission_best_baseline.csv`.
+
+## Бенчмарк производительности инференса
+
+```powershell
+python scripts/benchmark_inference.py --iterations 10
+```
+
+Замеряет задержку (`min`, `max`, `mean`, `p50`, `p90`, `p95`, `p99`), пропускную способность (RPS, точек/сек), пиковое потребление памяти (`tracemalloc`, `psutil`) для `ArtifactPredictor` и `SeasonalNaive` на горизонтах:
+- 24 часа (1 сутки, 1 маршрут);
+- 24 часа (1 сутки, 4 маршрута);
+- 168 часов (1 неделя, 4 маршрута);
+- 1464 часа (2 месяца, все 10 маршрутов конкурса).
+
+Результаты сохраняются в машиночитаемом формате в `benchmarks/latest.json`.
+

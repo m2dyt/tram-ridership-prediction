@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     lease_seconds: int = Field(default=120, ge=30, le=3600)
     max_attempts: int = Field(default=3, ge=1, le=10)
     poll_seconds: float = Field(default=2, ge=0.1, le=60)
+    model_version: str | None = None
+    models_root: Path = Path("models/tram")
+    fallback_to_seasonal_naive: bool = True
 
     @model_validator(mode="after")
     def supported_database(self):

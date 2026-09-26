@@ -100,13 +100,24 @@ def build_context(settings, sessions, clock, reads):
 @contextmanager
 def build_worker(settings: Settings):
     """Compose the worker at the process boundary; always release its DB pool."""
+    from tram.infrastructure.ml.artifact_predictor import ArtifactPredictor
+
     engine = make_engine(settings.database_url.get_secret_value())
     try:
         repository = SqlRepository(session_factory(engine))
+        fallback = SeasonalNaive()
+        predictor = (
+            ArtifactPredictor.from_active_version(
+                models_root=settings.models_root,
+                fallback=fallback,
+                specific_version=settings.model_version,
+            )
+            or fallback
+        )
         yield RunWorker(
             repository,
             SystemClock(),
-            SeasonalNaive(),
+            predictor,
             lease_seconds=settings.lease_seconds,
             max_attempts=settings.max_attempts,
         )
