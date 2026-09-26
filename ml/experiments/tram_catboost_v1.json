@@ -1,0 +1,31 @@
+{
+  "experiment_name": "tram_catboost_v1",
+  "description": "9 specialized per-route CatBoost models on residual learning with GPU acceleration, Russian calendar and Open-Meteo weather",
+  "model_type": "catboost",
+  "use_residual": true,
+  "per_route": true,
+  "use_weather": true,
+  "hyperparameters": {
+    "loss_function": "MAE",
+    "eval_metric": "MAE",
+    "iterations": 2500,
+    "learning_rate": 0.04,
+    "depth": 6,
+    "early_stopping_rounds": 150,
+    "random_seed": 42
+  },
+  "training_window": {
+    "start": "2025-01-01",
+    "end": "2025-08-31"
+  },
+  "validation_window": {
+    "start": "2025-09-01",
+    "end": "2025-10-31"
+  },
+  "test_window": {
+    "start": "2025-11-01",
+    "end": "2025-12-31"
+  },
+  "target": "boardings - hist_median_nonsummer_route_dow_hour",
+  "expected_val_wape_score": 0.9053
+}

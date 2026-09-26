@@ -30,6 +30,10 @@ from ml.training.tram.submission import (
     save_submission,
     generate_candidate_path,
 )
+from ml.training.tram.bundle import (
+    export_model_bundle,
+    set_active_version,
+)
 
 
 def train_and_evaluate(
@@ -46,6 +50,10 @@ def train_and_evaluate(
     save_candidate: bool = True,
     use_weather: bool = True,
     weather_path: Path | None = None,
+    export_bundle_version: str | None = None,
+    overwrite: bool = False,
+    set_active: bool = False,
+    models_root: Path = Path("models/tram"),
 ) -> dict:
     """Run full end-to-end training, validation, and optional submission generation."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +98,28 @@ def train_and_evaluate(
 
     report_str = format_evaluation_report(val_metrics, per_route=per_route_metrics)
     print(report_str)
+
+    # Optional model bundle export
+    if export_bundle_version:
+        export_model_bundle(
+            version=export_bundle_version,
+            models=val_models,
+            profiles=profiles_train,
+            metrics={"overall": val_metrics, "per_route": per_route_metrics},
+            config={
+                "model_type": model_type,
+                "iterations": iterations,
+                "learning_rate": learning_rate,
+                "depth": depth,
+                "use_residual": use_residual,
+                "per_route": per_route,
+                "use_weather": use_weather,
+            },
+            models_root=models_root,
+            overwrite=overwrite,
+        )
+        if set_active:
+            set_active_version(export_bundle_version, models_root=models_root)
 
     if eval_only:
         print("\nEvaluation only mode requested: skipping Stage 2 final submission generation.")
@@ -220,6 +250,22 @@ def main():
         default=None,
         help="Custom path to weather_hourly_2025.csv (defaults to data/weather_hourly_2025.csv)",
     )
+    parser.add_argument(
+        "--export-bundle",
+        type=str,
+        default=None,
+        help="Version string to export immutable model bundle to models/tram/<version>/",
+    )
+    parser.add_argument(
+        "--set-active",
+        action="store_true",
+        help="Mark the exported bundle as active version in models/tram/active_version.txt",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow overwriting existing model bundle version",
+    )
 
     args = parser.parse_args()
     train_and_evaluate(
@@ -235,6 +281,9 @@ def main():
         eval_only=args.eval_only,
         use_weather=not args.no_weather,
         weather_path=args.weather_path,
+        export_bundle_version=args.export_bundle,
+        set_active=args.set_active,
+        overwrite=args.overwrite,
     )
 
 
