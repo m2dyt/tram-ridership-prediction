@@ -28,6 +28,22 @@ class SqlUserRepository:
                 "created_at": user.created_at,
             }
 
+
+    def create(self, user_id: str, username: str, password_hash: str, role: str) -> None:
+        import sqlalchemy.exc
+        with self.session_factory() as session:
+            try:
+                session.add(UserRow(
+                    id=user_id,
+                    username=username,
+                    password_hash=password_hash,
+                    role=role,
+                    is_active=True
+                ))
+                session.commit()
+            except sqlalchemy.exc.IntegrityError:
+                raise ValueError("User already exists")
+
     def get_by_id(self, user_id: str) -> Document | None:
         with self.session_factory() as session:
             stmt = select(UserRow).where(UserRow.id == user_id)

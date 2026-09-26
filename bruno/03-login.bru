@@ -1,7 +1,7 @@
 meta {
-  name: 02-login
+  name: 03-login
   type: http
-  seq: 2
+  seq: 03
 }
 
 post {
@@ -11,14 +11,11 @@ post {
 }
 
 body:json {
-  {
-    "username": "testuser",
-    "password": "password"
-  }
+  {"username": "newuser", "password": "newpassword"}
 }
 
 script:post-response {
   if(res.status == 200) {
-    bru.setEnvVar("token", res.body.access_token);
+    bru.setEnvVar('token', res.body.access_token);
   }
 }

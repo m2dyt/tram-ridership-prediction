@@ -1,0 +1,16 @@
+meta {
+  name: 07-data-status
+  type: http
+  seq: 07
+}
+
+get {
+  url: http://localhost:8002/api/v1/data-status
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+

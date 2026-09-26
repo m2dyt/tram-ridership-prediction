@@ -1,0 +1,16 @@
+meta {
+  name: 21-logout
+  type: http
+  seq: 21
+}
+
+post {
+  url: http://localhost:8002/api/v1/auth/logout
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+

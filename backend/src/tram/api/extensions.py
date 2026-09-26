@@ -79,6 +79,7 @@ def auth_bindings(service):
             "authRefresh": lambda p, q, r: refresh(p, q, r),
         },
         {
+            "authRegister": lambda p, c, r: service.register(c["username"], c["password"]),
             "authLogin": lambda p, c, r: login(p, c),
             "authLogout": lambda p, c, r: logout(p, c, r),
         }

@@ -1,0 +1,16 @@
+meta {
+  name: 04-me
+  type: http
+  seq: 04
+}
+
+get {
+  url: http://localhost:8002/api/v1/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+

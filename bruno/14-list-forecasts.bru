@@ -1,0 +1,16 @@
+meta {
+  name: 14-list-forecasts
+  type: http
+  seq: 14
+}
+
+get {
+  url: http://localhost:8002/api/v1/forecast-runs
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+

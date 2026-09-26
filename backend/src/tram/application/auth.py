@@ -28,6 +28,17 @@ class AuthService:
     def _hash_token(self, token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+    def register(self, username: str, password: str) -> dict:
+        import uuid
+        user_id = str(uuid.uuid4())
+        hashed = self.hasher.hash(password)
+        try:
+            self.users.create(user_id, username, hashed, "operator")
+        except ValueError:
+            raise ApplicationError("VALIDATION_ERROR", "Username already exists")
+        return {"id": user_id}
+
     def login(self, username: str, password: str) -> tuple[str, datetime, str, dict]:
         user = self.users.get_by_username(username)
         if not user or not user.get("is_active"):

@@ -1,0 +1,16 @@
+meta {
+  name: 02-register
+  type: http
+  seq: 02
+}
+
+post {
+  url: http://localhost:8002/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {"username": "newuser", "password": "newpassword"}
+}
+

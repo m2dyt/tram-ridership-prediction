@@ -1,0 +1,16 @@
+meta {
+  name: 05-refresh
+  type: http
+  seq: 05
+}
+
+post {
+  url: http://localhost:8002/api/v1/auth/refresh
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
