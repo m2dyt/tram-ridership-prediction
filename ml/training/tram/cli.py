@@ -44,13 +44,19 @@ def train_and_evaluate(
     per_route: bool = True,
     eval_only: bool = False,
     save_candidate: bool = True,
+    use_weather: bool = True,
+    weather_path: Path | None = None,
 ) -> dict:
     """Run full end-to-end training, validation, and optional submission generation."""
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates_dir = output_dir / "candidates"
     candidates_dir.mkdir(parents=True, exist_ok=True)
 
-    grid_train, grid_val, grid_sub = build_feature_matrix(data_dir)
+    grid_train, grid_val, grid_sub = build_feature_matrix(
+        data_dir,
+        use_weather=use_weather,
+        weather_path=weather_path,
+    )
 
     print(f"Train grid size: {len(grid_train):,} rows")
     print(f"Val grid size:   {len(grid_val):,} rows")
@@ -203,6 +209,17 @@ def main():
         action="store_true",
         help="Only run Stage 1 validation and print report without generating submission",
     )
+    parser.add_argument(
+        "--no-weather",
+        action="store_true",
+        help="Disable external Open-Meteo weather features",
+    )
+    parser.add_argument(
+        "--weather-path",
+        type=Path,
+        default=None,
+        help="Custom path to weather_hourly_2025.csv (defaults to data/weather_hourly_2025.csv)",
+    )
 
     args = parser.parse_args()
     train_and_evaluate(
@@ -216,6 +233,8 @@ def main():
         use_residual=not args.no_residual,
         per_route=not args.no_per_route,
         eval_only=args.eval_only,
+        use_weather=not args.no_weather,
+        weather_path=args.weather_path,
     )
 
 

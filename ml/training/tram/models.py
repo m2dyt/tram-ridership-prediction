@@ -51,8 +51,11 @@ def train_validation_models(
         y_train_fit = y_train
         y_val_fit = y_val
 
-    X_train = train_feat[FEATURE_COLS]
-    X_val = val_feat[FEATURE_COLS]
+    active_features = [c for c in FEATURE_COLS if c in train_feat.columns]
+    active_route_features = [c for c in active_features if c != "route"]
+
+    X_train = train_feat[active_features]
+    X_val = val_feat[active_features]
 
     val_preds = np.zeros(len(val_feat), dtype=float)
     route_models: dict[int, Any] = {}
@@ -90,9 +93,9 @@ def train_validation_models(
             for r in ACTIVE_ROUTES:
                 mask_tr = (train_feat["route"] == r) & (train_feat["is_summer"] == 0)
                 mask_val = val_feat["route"] == r
-                X_tr_r = train_feat.loc[mask_tr, ROUTE_FEATURE_COLS]
+                X_tr_r = train_feat.loc[mask_tr, active_route_features]
                 y_tr_r = y_train_fit[mask_tr]
-                X_val_r = val_feat.loc[mask_val, ROUTE_FEATURE_COLS]
+                X_val_r = val_feat.loc[mask_val, active_route_features]
                 y_val_r = y_val_fit[mask_val]
 
                 m_r = CatBoostRegressor(**cb_params)
@@ -252,8 +255,11 @@ def fit_final_and_predict(
     y_full = full_train_feat["boardings"].values
     y_full_fit = y_full - base_full if use_residual else y_full
 
-    X_full = full_train_feat[FEATURE_COLS]
-    X_sub = sub_feat[FEATURE_COLS]
+    active_features = [c for c in FEATURE_COLS if c in full_train_feat.columns]
+    active_route_features = [c for c in active_features if c != "route"]
+
+    X_full = full_train_feat[active_features]
+    X_sub = sub_feat[active_features]
 
     sub_preds = np.zeros(len(sub_feat), dtype=float)
 
@@ -283,9 +289,9 @@ def fit_final_and_predict(
         for r in ACTIVE_ROUTES:
             mask_full = (full_train_feat["route"] == r) & (full_train_feat["is_summer"] == 0)
             mask_sub = sub_feat["route"] == r
-            X_full_r = full_train_feat.loc[mask_full, ROUTE_FEATURE_COLS]
+            X_full_r = full_train_feat.loc[mask_full, active_route_features]
             y_full_r = y_full_fit[mask_full]
-            X_sub_r = sub_feat.loc[mask_sub, ROUTE_FEATURE_COLS]
+            X_sub_r = sub_feat.loc[mask_sub, active_route_features]
 
             best_iter = val_models[r].get_best_iteration() or iterations
             final_cb_params = cb_params.copy()

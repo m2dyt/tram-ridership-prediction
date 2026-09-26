@@ -57,7 +57,18 @@ PRE_HOLIDAYS_2025: set[str] = {
 ALL_ROUTES: list[int] = [1, 5, 7, 11, 12, 17, 25, 26, 28, 50]
 ACTIVE_ROUTES: list[int] = [1, 7, 11, 12, 17, 25, 26, 28, 50]
 
-FEATURE_COLS: list[str] = [
+WEATHER_FEATURE_COLS: list[str] = [
+    "temperature_2m",
+    "precipitation",
+    "snowfall",
+    "wind_speed_10m",
+    "is_freezing",
+    "is_precipitation",
+    "is_snow",
+    "is_heavy_snow",
+]
+
+BASE_FEATURE_COLS: list[str] = [
     "route",
     "hour",
     "dow_effective",
@@ -86,6 +97,8 @@ FEATURE_COLS: list[str] = [
     "hist_mean_route_hour",
     "hist_mean_route",
 ]
+
+FEATURE_COLS: list[str] = BASE_FEATURE_COLS + WEATHER_FEATURE_COLS
 
 CATEGORICAL_FEATURES: list[str] = ["route", "hour", "dow_effective"]
 ROUTE_FEATURE_COLS: list[str] = [c for c in FEATURE_COLS if c != "route"]
@@ -149,8 +162,60 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def attach_weather_features(
+    df: pd.DataFrame,
+    weather_df: pd.DataFrame | None = None,
+    weather_path: Path | None = None,
+) -> pd.DataFrame:
+    """Attach normalized Moscow hourly weather to dataset."""
+    df = df.copy()
+
+    if weather_df is None:
+        if weather_path is None:
+            # Look in standard locations
+            candidate_paths = [
+                Path("data/weather_hourly_2025.csv"),
+                Path("../data/weather_hourly_2025.csv"),
+                Path("../../data/weather_hourly_2025.csv"),
+            ]
+            for p in candidate_paths:
+                if p.is_file():
+                    weather_path = p
+                    break
+
+        if weather_path and weather_path.is_file():
+            weather_df = pd.read_csv(weather_path)
+
+    if weather_df is not None:
+        # Select required columns
+        join_cols = ["date", "hour"] + [c for c in WEATHER_FEATURE_COLS if c in weather_df.columns]
+        w_sub = weather_df[join_cols].drop_duplicates(subset=["date", "hour"])
+        df = df.merge(w_sub, on=["date", "hour"], how="left")
+
+    # Fill any missing weather values with neutral defaults
+    default_values = {
+        "temperature_2m": 5.0,
+        "precipitation": 0.0,
+        "snowfall": 0.0,
+        "wind_speed_10m": 10.0,
+        "is_freezing": 0,
+        "is_precipitation": 0,
+        "is_snow": 0,
+        "is_heavy_snow": 0,
+    }
+    for col in WEATHER_FEATURE_COLS:
+        if col not in df.columns:
+            df[col] = default_values[col]
+        else:
+            df[col] = df[col].fillna(default_values[col])
+
+    return df
+
+
 def build_feature_matrix(
     data_dir: Path,
+    use_weather: bool = True,
+    weather_path: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load raw labels, generate full grids with missing zeros, and split into train, val, and submission test."""
     train_lbl_path = data_dir / "labels" / "labels_day_train.csv"
@@ -184,5 +249,13 @@ def build_feature_matrix(
     grid_train = add_calendar_features(grid_train)
     grid_val = add_calendar_features(grid_val)
     grid_sub = add_calendar_features(grid_sub)
+
+    # Add weather features if enabled
+    if use_weather:
+        print("Attaching hourly weather features (temperature, precipitation, snow, wind)...")
+        w_path = weather_path or Path("data/weather_hourly_2025.csv")
+        grid_train = attach_weather_features(grid_train, weather_path=w_path)
+        grid_val = attach_weather_features(grid_val, weather_path=w_path)
+        grid_sub = attach_weather_features(grid_sub, weather_path=w_path)
 
     return grid_train, grid_val, grid_sub
