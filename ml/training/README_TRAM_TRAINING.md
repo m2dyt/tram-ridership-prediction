@@ -1,50 +1,25 @@
-# Запуск обучения прогнозирования пассажиропотока трамваев (с поддержкой GPU)
+# Tram competition trainer: command and limitations
 
-Скрипт [`train_tram.py`](file:///c:/Users/Corvych/Documents/Programming/Hacathons/tram-ridership-prediction/ml/training/train_tram.py) реализует полный цикл подготовки данных, валидации, обучения на GPU и генерации итогового файла сабмита `submission.csv`.
+[`train_tram.py`](train_tram.py) is an offline experiment which prepares route × date × hour forecasts and writes `submission.csv`. It is not wired to the FastAPI prediction worker. The code expects challenge files under `dataset/` (by default), including `labels/` and `test_submission.csv`; `dataset/` is ignored by Git, so a new clone will not necessarily have them.
 
----
+## Before using it
 
-## 1. Установка зависимостей на целевой машине с GPU
+Read the [current challenge/model plan](../../docs/HACKATHON_READINESS_PLAN.md) and task checklist ([DATA/MODEL/BACKEND](../../docs/ML_BACKEND_TASKS.md)). Verify the archive and data dictionary first. In particular, the current code fills missing joined target rows with zero, uses manual route/seasonal adjustments, forces route 5 to zero in the submission, and assumes exactly 14,640 test rows. Each choice requires validation against the actual challenge schema and fixed temporal validation. The organizer Q&A says route 5 must be present and may be zero; this does not validate any other rows.
 
-На машине с видеокартой NVIDIA выполните:
+Older descriptions of a “90.3%+” score or expected improvement are not verified in this repository. Cite a score only with its exact data/checksum, split, code/config, predictions and platform receipt. Do not use final test labels for model selection.
 
-```bash
-pip install -r ml/training/requirements-gpu.txt
+## Current command interface
+
+From the repository root with Python dependencies installed:
+
+```powershell
+python ml/training/train_tram.py --help
 ```
 
-> **Примечание по CatBoost и GPU:**
-> `catboost` поддерживает CUDA «из коробки» (не требует ручной сборки). При передаче `--model catboost` скрипт автоматически использует `task_type="GPU"`. Если видеокарта недоступна, он плавно откатывается на мультипоточный CPU.
+Arguments include `--data-dir`, `--output-dir`, `--cpu`, `--model`, `--iterations`, `--learning-rate`, `--depth`, `--no-residual` and `--no-per-route`. The implementation currently offers `catboost`, `lightgbm`, `histgradient` and `baseline`; the default data path and optional model dependencies must be checked before launch. `--help` is safe and does not train. Run training only after input and validation review; retain the existing best submission separately.
 
----
+The script writes a semicolon-delimited CSV with `route;date;hour;prediction` and currently checks a fixed expected row count. The caller must independently verify unique keys, exact match to the supplied sample, finite nonnegative predictions and route-5 presence. Its printout alone is not a scored submission.
 
-## 2. Команды запуска
+## Inputs and dependencies
 
-### Основной рекомендуемый запуск на NVIDIA GPU (CatBoost + Per-Route + Clean Residuals):
-```bash
-python ml/training/train_tram.py --model catboost --iterations 2500 --learning-rate 0.035 --depth 6
-```
-
-### Запуск быстрой калиброванной сезонной базы (чистый numpy/pandas, дает >90.3% WAPE-score без обучения):
-```bash
-python ml/training/train_tram.py --model baseline
-```
-
----
-
-## 3. Что делает скрипт под капотом
-
-1. **Генерация полной регулярной сетки:**
-   * Строит декартово произведение дат (январь–октябрь), всех 24 часов суток и 10 маршрутов (всего 72 960 строк).
-   * Выполняет `left join` с разметкой из `labels/labels_day_*.csv` и заполняет пропуски нулями (`fillna(0)`).
-2. **Физическая калибровка транспортной сети (дала прорыв выше 90.3%):**
-   * **Ремонты путей на выходных (маршруты 50 и 7):** в сентябре–октябре маршрут 50 закрыт по выходным (0 посадок), а маршрут 7 укорочен (спад на 40%). Модель учитывает это изменение схемы движения.
-   * **Осенний рост магистральных маршрутов:** в холодный сезон маршруты 17 и 25 имеют прирост выходного трафика (+15-18%).
-   * **Подъем рабочего дня:** в холодные месяцы (октябрь, ноябрь, декабрь) пассажиропоток в будни возрастает на 4% (отказ от самокатов и пеших маршрутов).
-   * **Исключение лета из обучения остатков:** летние месяцы (июнь–август со спадом -150 пассажиров) исключены из обучения деревьев, чтобы не сбивать осенне-зимний прогноз в отрицательную сторону.
-3. **Двухэтапное обучение и валидация:**
-   * **Этап 1:** локальная валидация (обучение на Jan–Aug, проверка на Sep–Oct) с выводом MAE, WAPE и WAPE-score по каждому маршруту и в целом.
-   * **Этап 2:** полное переобучение на всех доступных 10 месяцах (Jan–Oct). В финальном обучении сентябрь и октябрь уже входят в историю, поэтому ноябрь–декабрь прогнозируются еще точнее (~92–94%+).
-4. **Генерация решения:**
-   * Прогноз на ноябрь–декабрь 2025 года (строго 14 640 строк = 10 маршрутов × 61 день × 24 часа).
-   * Округление до целых чисел, отсечение отрицательных значений.
-   * Сохранение строго по регламенту соревнования в `ml/predictions/submission.csv` (разделитель `;`, колонки `route;date;hour;prediction`).
+The original challenge archive is linked from the user-provided specification: [dataset.zip](https://disk.yandex.ru/d/DiFwlfMOauxjBg). Save the original and data dictionary in `sources/`, record provenance and SHA-256, and put derived files under `data/`. The script imports the ML stack lazily, but the repo has a legacy `requirements-gpu.txt` in addition to root `requirements.txt`; dependency consolidation is an explicit item in [ML_BACKEND_TASKS.md](../../docs/ML_BACKEND_TASKS.md).

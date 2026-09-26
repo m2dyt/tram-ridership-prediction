@@ -146,17 +146,19 @@
 | [DATASETS.md](../docs/DATASETS.md) | Наборы 624/62743 пользователя, дополнительные источники, порядок получения, образцы и пробелы данных. |
 | [DATA_AUDIT.md](../docs/DATA_AUDIT.md) | Аудит полученных архивов 624/62743: поля, покрытие, дубли, нули, координаты и ограничения соединения. |
 | [DATA_LINK_CHECKS.json](../docs/DATA_LINK_CHECKS.json) | Фактические результаты проверки URL, время, ограничения и SHA-256 скачанных образцов. |
-| [DELIVERY_PLAN.md](../docs/DELIVERY_PLAN.md) | План текущей реализации без обучения, порядок шагов и критерии проверки. |
+| [DELIVERY_PLAN.md](../docs/DELIVERY_PLAN.md) | Исторический план предыдущей поставки; читать вместе с актуальным планом ML/backend. |
 | [FILE_MAP.md](../docs/FILE_MAP.md) | Полная карта поддерживаемых файлов и ссылок на папки. |
+| [HACKATHON_READINESS_PLAN.md](../docs/HACKATHON_READINESS_PLAN.md) | Сверка хакатонного PDF и Q&A с состоянием проекта, источники и приоритеты реализации без frontend. |
 | [IMPLEMENTATION_LOG.md](../docs/IMPLEMENTATION_LOG.md) | История выполненных шагов: план → реализация → проверки → ревью. |
 | [LOCAL_SETUP.md](../docs/LOCAL_SETUP.md) | Подробности Python/venv и диагностики локального окружения. |
+| [ML_BACKEND_TASKS.md](../docs/ML_BACKEND_TASKS.md) | Последовательные задачи для данных, обучения, model artifact и backend inference с критериями review. |
 | [METRO_PIPELINE.md](../docs/METRO_PIPELINE.md) | Команды подготовки и квартальной оценки метро, словарь файлов, правила качества, метрики и ограничения. |
 | [OPERATIONS.md](../docs/OPERATIONS.md) | Готовые команды демо, оценки, источников, GeoJSON/CSV, replay, экспорта и калькулятора. |
 | [PASSENGER_OCCUPANCY.md](../docs/PASSENGER_OCCUPANCY.md) | Математическая постановка восстановления высадок и остатка, сценарии и критерии валидации. |
 | [README.md](../docs/README.md) | Навигация и инструкция компонента. |
 | [STATUS.md](../docs/STATUS.md) | Сопоставление требований ТЗ с кодом и явные ограничения данных, источников и эксплуатации. |
 | [TESTING.md](../docs/TESTING.md) | Полный запуск тестов без skip, frontend и временный browser smoke. |
-| [TRAINING_PLAN.md](../docs/TRAINING_PLAN.md) | Пошаговая подготовка к обучению: постановка, данные, splits, признаки, кандидат, оценка, подключение. |
+| [TRAINING_PLAN.md](../docs/TRAINING_PLAN.md) | Общий и квартальный metro training plan; трамвайный конкурс описан в HACKATHON_READINESS_PLAN и ML_BACKEND_TASKS. |
 
 ## docs/decisions
 
@@ -232,6 +234,19 @@
 | Файл | Назначение |
 |---|---|
 | [README.md](../ml/README.md) | Навигация и инструкция компонента. |
+
+## ml/training
+
+| Файл | Назначение |
+|---|---|
+| [README.md](../ml/training/README.md) | Разделение трамвайного конкурса и квартального метро, входы, review и безопасный порядок запуска. |
+| [README_TRAM_TRAINING.md](../ml/training/README_TRAM_TRAINING.md) | CLI/ограничения трамвайного тренера и проверка его результата. |
+| [prepare.py](../ml/training/prepare.py) | Подготовка квартальной матрицы признаков метро из проверенного bundle. |
+| [train.py](../ml/training/train.py) | Обучение конфигурируемого кандидата квартального прогноза метро. |
+| [evaluate.py](../ml/training/evaluate.py) | Оценка metro candidate против baseline. |
+| [train_tram.py](../ml/training/train_tram.py) | Конкурсный route × date × hour trainer и генератор submission CSV. |
+| [requirements-gpu.txt](../ml/training/requirements-gpu.txt) | Устаревающий отдельный список модельных зависимостей; требует сведения к основному requirements policy. |
+| [__init__.py](../ml/training/__init__.py) | Маркер Python-пакета обучения. |
 
 ## ml/src
 
