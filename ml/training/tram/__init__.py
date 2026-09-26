@@ -1,12 +1,5 @@
-import sys
-from pathlib import Path
+"""Tram ridership prediction training and feature engineering package."""
 
-# Ensure workspace root is in sys.path when invoked directly as a script
-_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-if str(_WORKSPACE_ROOT) not in sys.path:
-    sys.path.insert(0, str(_WORKSPACE_ROOT))
-
-# Re-export key components for backwards compatibility with any existing imports
 from ml.training.tram.features import (
     ALL_ROUTES,
     ACTIVE_ROUTES,
@@ -34,10 +27,7 @@ from ml.training.tram.models import (
 from ml.training.tram.submission import (
     format_submission,
     save_submission,
-)
-from ml.training.tram.cli import (
-    train_and_evaluate,
-    main,
+    generate_candidate_path,
 )
 
 __all__ = [
@@ -59,9 +49,5 @@ __all__ = [
     "fit_final_and_predict",
     "format_submission",
     "save_submission",
-    "train_and_evaluate",
-    "main",
+    "generate_candidate_path",
 ]
-
-if __name__ == "__main__":
-    main()
