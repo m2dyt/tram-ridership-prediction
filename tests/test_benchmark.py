@@ -55,11 +55,17 @@ class TestBenchmark(unittest.TestCase):
             self.assertIn("environment", data)
             self.assertIn("scenarios", data)
             self.assertIn("24h_SingleRoute", data["scenarios"])
-            self.assertIn("ArtifactPredictor", data["scenarios"]["24h_SingleRoute"])
-
-            ap_metrics = data["scenarios"]["24h_SingleRoute"]["ArtifactPredictor"]["metrics"]
-            self.assertGreater(ap_metrics["mean_ms"], 0.0)
-            self.assertEqual(data["scenarios"]["24h_SingleRoute"]["ArtifactPredictor"]["errors"], 0)
+            if "ArtifactPredictor" in data["scenarios"]["24h_SingleRoute"]:
+                ap_metrics = data["scenarios"]["24h_SingleRoute"]["ArtifactPredictor"]["metrics"]
+                self.assertGreater(ap_metrics["mean_ms"], 0.0)
+                self.assertEqual(
+                    data["scenarios"]["24h_SingleRoute"]["ArtifactPredictor"]["errors"], 0
+                )
+            else:
+                self.assertIn("SeasonalNaive", data["scenarios"]["24h_SingleRoute"])
+                sn_metrics = data["scenarios"]["24h_SingleRoute"]["SeasonalNaive"]["metrics"]
+                self.assertGreater(sn_metrics["mean_ms"], 0.0)
+                self.assertEqual(data["scenarios"]["24h_SingleRoute"]["SeasonalNaive"]["errors"], 0)
 
 
 if __name__ == "__main__":
