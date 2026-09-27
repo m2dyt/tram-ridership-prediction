@@ -1,14 +1,27 @@
-from datetime import datetime, timedelta, UTC
-import pytest
+from datetime import UTC, datetime, timedelta
 
-from tram.application.errors import ApplicationError
+import pytest
 from tram.application.auth import AuthService
+from tram.application.errors import ApplicationError
 
 
 class FakeUserRepository:
     def __init__(self, users):
         self._users = {u["id"]: u for u in users}
         self._by_username = {u["username"]: u for u in users}
+
+    def create(self, user_id: str, username: str, password_hash: str, role: str):
+        if username in self._by_username:
+            raise ValueError("Username already exists")
+        user = {
+            "id": user_id,
+            "username": username,
+            "password_hash": password_hash,
+            "role": role,
+            "is_active": True,
+        }
+        self._users[user_id] = user
+        self._by_username[username] = user
 
     def get_by_username(self, username: str):
         return self._by_username.get(username)
@@ -74,8 +87,20 @@ class FakeClock:
 @pytest.fixture
 def auth_service():
     users = [
-        {"id": "u1", "username": "admin", "password_hash": "hashed_secret", "role": "operator", "is_active": True},
-        {"id": "u2", "username": "guest", "password_hash": "hashed_123", "role": "viewer", "is_active": False},
+        {
+            "id": "u1",
+            "username": "admin",
+            "password_hash": "hashed_secret",
+            "role": "operator",
+            "is_active": True,
+        },
+        {
+            "id": "u2",
+            "username": "guest",
+            "password_hash": "hashed_123",
+            "role": "viewer",
+            "is_active": False,
+        },
     ]
     return AuthService(
         users=FakeUserRepository(users),
@@ -92,7 +117,7 @@ def test_login_success(auth_service):
     access_token, access_exp, refresh_token, user = auth_service.login("admin", "secret")
     assert access_token == "access_token_for_u1"
     assert user["id"] == "u1"
-    
+
     # Check session created
     refresh_hash = auth_service._hash_token(refresh_token)
     assert refresh_hash in auth_service.sessions.sessions
@@ -112,11 +137,11 @@ def test_login_inactive_user(auth_service):
 
 def test_refresh_success(auth_service):
     _, _, refresh_token, _ = auth_service.login("admin", "secret")
-    
+
     acc, exp, new_refresh = auth_service.refresh(refresh_token)
     assert acc == "access_token_for_u1"
     assert new_refresh != refresh_token
-    
+
     # Old token shouldn't work anymore
     with pytest.raises(ApplicationError):
         auth_service.refresh(refresh_token)
@@ -125,7 +150,7 @@ def test_refresh_success(auth_service):
 def test_logout(auth_service):
     _, _, refresh_token, _ = auth_service.login("admin", "secret")
     auth_service.logout(refresh_token)
-    
+
     with pytest.raises(ApplicationError):
         auth_service.refresh(refresh_token)
 
@@ -133,9 +158,9 @@ def test_logout(auth_service):
 def test_logout_everywhere(auth_service):
     _, _, refresh1, _ = auth_service.login("admin", "secret")
     _, _, refresh2, _ = auth_service.login("admin", "secret")
-    
+
     auth_service.logout(refresh1, everywhere=True)
-    
+
     with pytest.raises(ApplicationError):
         auth_service.refresh(refresh1)
     with pytest.raises(ApplicationError):
@@ -145,6 +170,37 @@ def test_logout_everywhere(auth_service):
 def test_me(auth_service):
     user = auth_service.me("u1")
     assert user["username"] == "admin"
-    
+    assert set(user) == {"id", "username", "role"}
+
     with pytest.raises(ApplicationError):
-        auth_service.me("u2") # inactive
+        auth_service.me("u2")  # inactive
+
+
+def test_register_creates_viewer(auth_service):
+    result = auth_service.register("new-viewer", "password123")
+
+    user = auth_service.users.get_by_id(result["id"])
+    assert user["role"] == "viewer"
+    assert user["password_hash"] == "hashed_password123"
+
+
+def test_register_rejects_duplicate_username(auth_service):
+    with pytest.raises(ApplicationError) as exc:
+        auth_service.register("admin", "password123")
+
+    assert exc.value.code == "VALIDATION_ERROR"
+
+
+def test_create_operator_assigns_operator_role(auth_service):
+    result = auth_service.create_operator("new-operator", "password123")
+
+    user = auth_service.users.get_by_id(result["id"])
+    assert user["role"] == "operator"
+    assert user["password_hash"] == "hashed_password123"
+
+
+def test_create_operator_rejects_duplicate_username(auth_service):
+    with pytest.raises(ApplicationError) as exc:
+        auth_service.create_operator("admin", "password123")
+
+    assert exc.value.code == "VALIDATION_ERROR"

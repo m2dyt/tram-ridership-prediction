@@ -1,0 +1,19 @@
+meta {
+  name: 03-create-operator
+  type: http
+  seq: 03
+}
+
+post {
+  url: http://localhost:8000/api/v1/auth/operators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {"username": "newoperator", "password": "newpassword"}
+}

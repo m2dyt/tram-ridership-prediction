@@ -27,7 +27,7 @@ info:
     ML.
     Неизвестные query-параметры запрещены (422). Для массивов JSON порядок route_ids учитывается при проверке
     идемпотентности; порядок ключей объекта не учитывается.
-    GET требует viewer или operator, POST — operator; роль определяется конфигурацией Bearer-токена.
+    GET требует viewer или operator, защищённые POST — operator; роль берётся из статического Bearer-токена или JWT.
     Зависимости между полями, принадлежность IDs, порядок дат и числовые границы диапазона проверяются приложением
     дополнительно к JSON Schema.
     '
@@ -1086,7 +1086,7 @@ paths:
       tags:
       - Context
       operationId: getContextSnapshotGeojson
-      summary: GeoJSON-������������� ����
+      summary: GeoJSON-представление слоя
       parameters:
       - in: path
         name: snapshot_id
@@ -1096,7 +1096,7 @@ paths:
           format: uuid
       responses:
         '200':
-          description: �������� �����
+          description: Успешный ответ
           content:
             application/geo+json:
               schema:
@@ -1172,22 +1172,14 @@ paths:
       tags:
       - Auth
       operationId: authRegister
-      summary: Регистрация нового пользователя
+      summary: Публичная регистрация пользователя с ролью viewer
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [username, password]
-              properties:
-                username:
-                  type: string
-                  minLength: 3
-                password:
-                  type: string
-                  minLength: 6
+              $ref: '#/components/schemas/UserCredentials'
       responses:
         '200':
           description: Успешная регистрация
@@ -1200,6 +1192,41 @@ paths:
                     type: string
         '400':
           $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /auth/operators:
+    post:
+      tags:
+      - Auth
+      operationId: authCreateOperator
+      summary: Создание пользователя с ролью operator
+      description: Требуется действующий Bearer-токен с ролью operator.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+      responses:
+        '200':
+          description: Создана учётная запись оператора
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
   /auth/login:
@@ -1305,8 +1332,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: Токен закрытого стенда из конфигурации. Роли viewer/operator; выдача токенов не входит в
-        этот контракт. Не предполагает JWT.
+      description: Статический токен из конфигурации или JWT из /auth/login. Защищённые POST требуют роль operator.
   parameters:
     DatasetRevision:
       name: dataset_revision_id
@@ -1738,6 +1764,19 @@ components:
             request_id: demo-request-01
             details: []
   schemas:
+    UserCredentials:
+      type: object
+      additionalProperties: false
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 6
     Metric:
       type: string
       enum:
