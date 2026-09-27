@@ -8,3 +8,4 @@
 |---|---|
 | [__init__.py](__init__.py) | Маркер Python-пакета инфраструктурного слоя ML. |
 | [artifact_predictor.py](artifact_predictor.py) | Реализация порта `Predictor` (`ArtifactPredictor`), подключающая версионированные бандлы моделей (`TramModelBundle`) к API и воркеру с SHA-256 валидацией и откатом на `SeasonalNaive`. |
+| [model_registry.py](model_registry.py) | Проверка версии, состава, JSON и SHA-256 бандла для HTTP-реестра без десериализации `estimator.joblib`. |
