@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from tram.application.errors import ApplicationError
 from tram.application.ports import Clock, PasswordHasher, SessionStore, TokenIssuer, UserRepository
@@ -28,22 +29,26 @@ class AuthService:
     def _hash_token(self, token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-
     def register(self, username: str, password: str) -> dict:
-        import uuid
-        user_id = str(uuid.uuid4())
+        return self._create_user(username, password, "viewer")
+
+    def create_operator(self, username: str, password: str) -> dict:
+        return self._create_user(username, password, "operator")
+
+    def _create_user(self, username: str, password: str, role: str) -> dict:
+        user_id = str(uuid4())
         hashed = self.hasher.hash(password)
         try:
-            self.users.create(user_id, username, hashed, "operator")
-        except ValueError:
-            raise ApplicationError("VALIDATION_ERROR", "Username already exists")
+            self.users.create(user_id, username, hashed, role)
+        except ValueError as exc:
+            raise ApplicationError("VALIDATION_ERROR", "Username already exists") from exc
         return {"id": user_id}
 
     def login(self, username: str, password: str) -> tuple[str, datetime, str, dict]:
         user = self.users.get_by_username(username)
         if not user or not user.get("is_active"):
             raise ApplicationError("UNAUTHORIZED", "Invalid credentials")
-        
+
         if not self.hasher.verify(user["password_hash"], password):
             raise ApplicationError("UNAUTHORIZED", "Invalid credentials")
 
@@ -54,22 +59,22 @@ class AuthService:
         refresh_token = secrets.token_urlsafe(32)
         refresh_hash = self._hash_token(refresh_token)
         expires_at = now + timedelta(seconds=self.refresh_ttl)
-        
+
         self.sessions.create_session(user["id"], refresh_hash, now, expires_at)
         return access_token, access_exp, refresh_token, user
 
     def refresh(self, refresh_token: str) -> tuple[str, datetime, str]:
         now = self.clock.now()
         old_hash = self._hash_token(refresh_token)
-        
+
         new_refresh_token = secrets.token_urlsafe(32)
         new_refresh_hash = self._hash_token(new_refresh_token)
         expires_at = now + timedelta(seconds=self.refresh_ttl)
-        
+
         session = self.sessions.rotate_session(old_hash, new_refresh_hash, now, expires_at)
         if not session:
             raise ApplicationError("UNAUTHORIZED", "Invalid or expired session")
-            
+
         user = self.users.get_by_id(session["user_id"])
         if not user or not user.get("is_active"):
             raise ApplicationError("UNAUTHORIZED", "User deactivated")
@@ -82,10 +87,10 @@ class AuthService:
     def logout(self, refresh_token: str | None, everywhere: bool = False) -> None:
         if not refresh_token:
             return
-            
+
         now = self.clock.now()
         token_hash = self._hash_token(refresh_token)
-        
+
         if everywhere:
             session = self.sessions.get_session(token_hash, now)
             if session:
@@ -97,4 +102,4 @@ class AuthService:
         user = self.users.get_by_id(user_id)
         if not user or not user.get("is_active"):
             raise ApplicationError("UNAUTHORIZED", "User not found or deactivated")
-        return user
+        return {key: user[key] for key in ("id", "username", "role")}
