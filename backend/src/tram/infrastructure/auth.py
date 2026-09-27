@@ -31,6 +31,7 @@ class SqlUserRepository:
 
     def create(self, user_id: str, username: str, password_hash: str, role: str) -> None:
         import sqlalchemy.exc
+        from datetime import datetime, timezone
         with self.session_factory() as session:
             try:
                 session.add(UserRow(
@@ -38,11 +39,12 @@ class SqlUserRepository:
                     username=username,
                     password_hash=password_hash,
                     role=role,
-                    is_active=True
+                    is_active=True,
+                    created_at=datetime.now(timezone.utc)
                 ))
                 session.commit()
-            except sqlalchemy.exc.IntegrityError:
-                raise ValueError("User already exists")
+            except sqlalchemy.exc.IntegrityError as e:
+                raise ValueError(f"User already exists or DB constraint failed: {e}")
 
     def get_by_id(self, user_id: str) -> Document | None:
         with self.session_factory() as session:

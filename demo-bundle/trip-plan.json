@@ -1,0 +1,35 @@
+{
+  "trip_id": "demo-trip-20260927",
+  "vehicle_id": "demo-vehicle-01",
+  "network_revision_id": "demo-network-v3",
+  "route_id": "demo-route-01",
+  "direction_id": "demo-outbound",
+  "started_at": "2026-09-26T12:00:00+03:00",
+  "strategy": "uniform",
+  "capacity": 100,
+  "initial_passengers": 0,
+  "terminal_clear": true,
+  "source_mode": "demo",
+  "stops": [
+    {
+      "sequence": 1,
+      "stop_id": "demo-stop-01",
+      "arrival_at": "2026-09-26T12:05:00+03:00"
+    },
+    {
+      "sequence": 2,
+      "stop_id": "demo-stop-02",
+      "arrival_at": "2026-09-26T12:10:00+03:00"
+    },
+    {
+      "sequence": 3,
+      "stop_id": "demo-stop-03",
+      "arrival_at": "2026-09-26T12:15:00+03:00"
+    },
+    {
+      "sequence": 4,
+      "stop_id": "demo-stop-04",
+      "arrival_at": "2026-09-26T12:20:00+03:00"
+    }
+  ]
+}

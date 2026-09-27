@@ -1,0 +1,474 @@
+{
+  "capabilities": {
+    "dataset_revision_id": "demo-data-v3-20260927",
+    "network_revision_id": "demo-network-v3",
+    "source_mode": "demo",
+    "timezone": "Europe/Moscow",
+    "observation_profiles": [
+      {
+        "id": "demo-validations-route-hour",
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "hour",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "history_start": "2026-08-30T00:00:00+03:00",
+        "history_end": "2026-09-27T00:00:00+03:00",
+        "aggregation_method": "sum",
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      },
+      {
+        "id": "demo-validations-route-day",
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "day",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "history_start": "2026-07-29T00:00:00+03:00",
+        "history_end": "2026-09-27T00:00:00+03:00",
+        "aggregation_method": "sum",
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      },
+      {
+        "id": "demo-validations-route-month",
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "month",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "history_start": "2024-09-01T00:00:00+03:00",
+        "history_end": "2026-09-01T00:00:00+03:00",
+        "aggregation_method": "sum",
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      }
+    ],
+    "forecast_profiles": [
+      {
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "hour",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "aggregation_method": "sum",
+        "id": "demo-validations-day",
+        "observation_profile_id": "demo-validations-route-hour",
+        "horizon": "day",
+        "availability": "available",
+        "unavailable_reason": null,
+        "allowed_as_of_start": "2026-09-27T00:00:00+03:00",
+        "allowed_as_of_end": "2026-09-27T00:00:00+03:00",
+        "forecast_start_min": "2026-09-28T00:00:00+03:00",
+        "forecast_start_max": "2026-09-28T00:00:00+03:00",
+        "start_alignment": "local_midnight",
+        "evaluation_status": "pending",
+        "prediction_interval_available": false,
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      },
+      {
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "day",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "aggregation_method": "sum",
+        "id": "demo-validations-month",
+        "observation_profile_id": "demo-validations-route-day",
+        "horizon": "month",
+        "availability": "available",
+        "unavailable_reason": null,
+        "allowed_as_of_start": "2026-09-27T00:00:00+03:00",
+        "allowed_as_of_end": "2026-09-27T00:00:00+03:00",
+        "forecast_start_min": "2026-09-28T00:00:00+03:00",
+        "forecast_start_max": "2026-09-28T00:00:00+03:00",
+        "start_alignment": "local_midnight",
+        "evaluation_status": "pending",
+        "prediction_interval_available": false,
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      },
+      {
+        "metric": "validations",
+        "unit": "validations",
+        "spatial_level": "route",
+        "resolution": "month",
+        "route_ids": [
+          "demo-route-01"
+        ],
+        "aggregation_method": "sum",
+        "id": "demo-validations-year",
+        "observation_profile_id": "demo-validations-route-month",
+        "horizon": "year",
+        "availability": "available",
+        "unavailable_reason": null,
+        "allowed_as_of_start": "2026-09-27T00:00:00+03:00",
+        "allowed_as_of_end": "2026-09-27T00:00:00+03:00",
+        "forecast_start_min": "2026-10-01T00:00:00+03:00",
+        "forecast_start_max": "2026-10-01T00:00:00+03:00",
+        "start_alignment": "month_start",
+        "evaluation_status": "pending",
+        "prediction_interval_available": false,
+        "limitations": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ]
+      }
+    ],
+    "max_page_size": 1000,
+    "max_routes_per_run": 100,
+    "warnings": [
+      "Synthetic demonstration data; not real ridership or measured model accuracy"
+    ]
+  },
+  "network": {
+    "id": "demo-network-v3",
+    "routes": [
+      {
+        "network_revision_id": "demo-network-v3",
+        "valid_at": "2020-01-01",
+        "route": {
+          "id": "demo-route-01",
+          "number": "DEMO",
+          "name": "Synthetic tram route",
+          "valid_from": "2020-01-01",
+          "valid_to": null
+        },
+        "stops": [
+          {
+            "id": "demo-stop-01",
+            "name": "Demo stop 1",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                37.62,
+                55.75
+              ]
+            }
+          },
+          {
+            "id": "demo-stop-02",
+            "name": "Demo stop 2",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                37.625,
+                55.755
+              ]
+            }
+          },
+          {
+            "id": "demo-stop-03",
+            "name": "Demo stop 3",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                37.63,
+                55.76
+              ]
+            }
+          },
+          {
+            "id": "demo-stop-04",
+            "name": "Demo stop 4",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                37.636,
+                55.766
+              ]
+            }
+          }
+        ],
+        "warnings": [
+          "Synthetic demonstration data; not real ridership or measured model accuracy"
+        ],
+        "directions": [
+          {
+            "id": "demo-outbound",
+            "name": "Outbound",
+            "stops": [
+              {
+                "stop_id": "demo-stop-01",
+                "sequence": 1
+              },
+              {
+                "stop_id": "demo-stop-02",
+                "sequence": 2
+              },
+              {
+                "stop_id": "demo-stop-03",
+                "sequence": 3
+              },
+              {
+                "stop_id": "demo-stop-04",
+                "sequence": 4
+              }
+            ],
+            "segments": [
+              {
+                "id": "demo-segment-01",
+                "from_stop_id": "demo-stop-01",
+                "to_stop_id": "demo-stop-02",
+                "from_sequence": 1,
+                "to_sequence": 2,
+                "geometry": {
+                  "type": "LineString",
+                  "coordinates": [
+                    [
+                      37.62,
+                      55.75
+                    ],
+                    [
+                      37.625,
+                      55.755
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "demo-segment-02",
+                "from_stop_id": "demo-stop-02",
+                "to_stop_id": "demo-stop-03",
+                "from_sequence": 2,
+                "to_sequence": 3,
+                "geometry": {
+                  "type": "LineString",
+                  "coordinates": [
+                    [
+                      37.625,
+                      55.755
+                    ],
+                    [
+                      37.63,
+                      55.76
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "demo-segment-03",
+                "from_stop_id": "demo-stop-03",
+                "to_stop_id": "demo-stop-04",
+                "from_sequence": 3,
+                "to_sequence": 4,
+                "geometry": {
+                  "type": "LineString",
+                  "coordinates": [
+                    [
+                      37.63,
+                      55.76
+                    ],
+                    [
+                      37.636,
+                      55.766
+                    ]
+                  ]
+                }
+              }
+            ],
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  37.62,
+                  55.75
+                ],
+                [
+                  37.625,
+                  55.755
+                ],
+                [
+                  37.63,
+                  55.76
+                ],
+                [
+                  37.636,
+                  55.766
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "sources": [
+    {
+      "source": "validations",
+      "source_mode": "demo",
+      "event_watermark": "2026-09-27T00:00:00+03:00",
+      "ingested_at": "2026-09-27T00:00:00+03:00",
+      "freshness": "unknown",
+      "stale_after_seconds": null,
+      "quality": {
+        "status": "unverified",
+        "coverage_ratio": null,
+        "flags": [
+          "synthetic_example"
+        ]
+      }
+    }
+  ],
+  "models": [
+    {
+      "profile_ids": [
+        "demo-validations-day"
+      ],
+      "model": {
+        "id": "seasonal-baseline-day",
+        "version": "1",
+        "method": "seasonal_naive_v1",
+        "training_history_end": "2026-09-27T00:00:00+03:00",
+        "feature_set_version": "calendar-v1",
+        "is_baseline": true
+      }
+    },
+    {
+      "profile_ids": [
+        "demo-validations-month"
+      ],
+      "model": {
+        "id": "seasonal-baseline-month",
+        "version": "1",
+        "method": "seasonal_naive_v1",
+        "training_history_end": "2026-09-27T00:00:00+03:00",
+        "feature_set_version": "calendar-v1",
+        "is_baseline": true
+      }
+    },
+    {
+      "profile_ids": [
+        "demo-validations-year"
+      ],
+      "model": {
+        "id": "seasonal-baseline-year",
+        "version": "1",
+        "method": "seasonal_naive_v1",
+        "training_history_end": "2026-09-01T00:00:00+03:00",
+        "feature_set_version": "calendar-v1",
+        "is_baseline": true
+      }
+    }
+  ],
+  "series": [
+    {
+      "profile_id": "demo-validations-route-hour",
+      "spatial": {
+        "level": "route",
+        "route_id": "demo-route-01",
+        "direction_id": null,
+        "stop_id": null,
+        "stop_sequence": null,
+        "segment_id": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            37.62,
+            55.75
+          ],
+          [
+            37.625,
+            55.755
+          ],
+          [
+            37.63,
+            55.76
+          ],
+          [
+            37.636,
+            55.766
+          ]
+        ]
+      },
+      "coverage_start": "2026-08-30T00:00:00+03:00",
+      "coverage_end": "2026-09-27T00:00:00+03:00"
+    },
+    {
+      "profile_id": "demo-validations-route-day",
+      "spatial": {
+        "level": "route",
+        "route_id": "demo-route-01",
+        "direction_id": null,
+        "stop_id": null,
+        "stop_sequence": null,
+        "segment_id": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            37.62,
+            55.75
+          ],
+          [
+            37.625,
+            55.755
+          ],
+          [
+            37.63,
+            55.76
+          ],
+          [
+            37.636,
+            55.766
+          ]
+        ]
+      },
+      "coverage_start": "2026-07-29T00:00:00+03:00",
+      "coverage_end": "2026-09-27T00:00:00+03:00"
+    },
+    {
+      "profile_id": "demo-validations-route-month",
+      "spatial": {
+        "level": "route",
+        "route_id": "demo-route-01",
+        "direction_id": null,
+        "stop_id": null,
+        "stop_sequence": null,
+        "segment_id": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            37.62,
+            55.75
+          ],
+          [
+            37.625,
+            55.755
+          ],
+          [
+            37.63,
+            55.76
+          ],
+          [
+            37.636,
+            55.766
+          ]
+        ]
+      },
+      "coverage_start": "2024-09-01T00:00:00+03:00",
+      "coverage_end": "2026-09-01T00:00:00+03:00"
+    }
+  ]
+}

@@ -509,6 +509,7 @@ paths:
       - $ref: '#/components/parameters/ForecastStart'
       - $ref: '#/components/parameters/Limit'
       - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Active'
       responses:
         '200':
           description: Успешный ответ.
@@ -1309,6 +1310,13 @@ components:
         type: string
         format: date
       example: '2026-09-21'
+    Active:
+      name: active
+      in: query
+      required: false
+      description: Filter by active status
+      schema:
+        type: boolean
     RouteId:
       name: route_id
       in: query
@@ -2720,6 +2728,9 @@ components:
         id:
           type: string
           format: uuid
+        recommended_poll_seconds:
+          type: integer
+          description: Suggested polling interval for clients while running/queued
         status:
           $ref: '#/components/schemas/RunStatus'
         dataset_revision_id:

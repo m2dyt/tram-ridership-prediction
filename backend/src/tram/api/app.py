@@ -175,6 +175,11 @@ def create_http_app(
                 if not re.fullmatch(r"-?\d{1,12}", value):
                     raise ApplicationError("VALIDATION_ERROR", "Expected an integer", name)
                 value = int(value)
+            elif schema.get("type") == "boolean" and isinstance(value, str):
+                if value.lower() not in ("true", "false"):
+                    raise ApplicationError("VALIDATION_ERROR", "Expected true or false", name)
+                value = value.lower() == "true"
+                
             if next(contract.validator(schema).iter_errors(value), None):
                 raise ApplicationError(
                     "VALIDATION_ERROR", "Parameter does not match the API contract", name

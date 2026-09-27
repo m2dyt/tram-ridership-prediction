@@ -500,6 +500,7 @@ class ForecastService:
         run = {
             "id": str(uuid4()),
             "status": "queued",
+            "recommended_poll_seconds": 5,
             "dataset_revision_id": caps["dataset_revision_id"],
             "network_revision_id": caps["network_revision_id"],
             "profile": profile,

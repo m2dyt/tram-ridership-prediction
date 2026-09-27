@@ -185,6 +185,11 @@ class SqlRepository:
             statement = statement.where(
                 RunRow.status == query["status"], RunRow.finished_at <= before
             )
+            
+        if query.get("active"):
+            statement = statement.where(
+                or_(RunRow.finished_at.is_(None), RunRow.finished_at > before)
+            )
         if query.get("forecast_start"):
             statement = statement.where(
                 RunRow.forecast_start == parse_time(query["forecast_start"])
