@@ -10,6 +10,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from tram.application.service import ForecastService, ReadService
 from tram.application.worker import RunWorker
 from tram.infrastructure.database import Base, RunRow, make_engine, session_factory
+from tram.infrastructure.login_attempts import SqlLoginAttemptStore
 from tram.infrastructure.repository import SqlRepository
 from tram.infrastructure.runtime import SignedCursor
 from tram_ml.baseline import SeasonalNaive
@@ -87,6 +88,20 @@ def test_postgres_concurrent_idempotency(postgres_service):
         )
     assert results[0][0]["id"] == results[1][0]["id"]
     assert sum(created for _, created in results) == 1
+
+
+def test_postgres_login_attempt_limit_is_atomic(postgres_service):
+    attempts = SqlLoginAttemptStore(postgres_service.sessions, "test-secret")
+    now = postgres_service.clock.now()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(
+            executor.map(
+                lambda _: attempts.begin_attempt("admin", "192.0.2.1", now, 5, 900),
+                range(8),
+            )
+        )
+    assert results.count(None) == 5
+    assert results.count(900) == 3
 
 
 def test_postgres_worker_publishes_complete_forecast(postgres_service):

@@ -59,12 +59,14 @@ def create_http_app(
         expose_headers=["X-Request-ID", "Location", "Retry-After"],
     )
 
-    def error_response(request, code, message, field=None, status=None):
+    def error_response(request, code, message, field=None, status=None, retry_after=None):
         headers = {"X-Request-ID": request.state.request_id}
         if code == "UNAUTHORIZED":
             headers["WWW-Authenticate"] = "Bearer"
         if code == "SERVICE_UNAVAILABLE":
             headers["Retry-After"] = "5"
+        if retry_after is not None:
+            headers["Retry-After"] = str(retry_after)
         return JSONResponse(
             {
                 "code": code,
@@ -91,7 +93,9 @@ def create_http_app(
 
     @app.exception_handler(ApplicationError)
     async def application_error(request, exc):
-        return error_response(request, exc.code, exc.message, exc.field)
+        return error_response(
+            request, exc.code, exc.message, exc.field, retry_after=exc.retry_after
+        )
 
     @app.exception_handler(DomainError)
     async def domain_error(request, exc):
@@ -118,9 +122,11 @@ def create_http_app(
         parts = values[0].split()
         token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else ""
         token_b = token.encode()
-        operator = hmac.compare_digest(token_b, operator_token.encode()) if operator_token else False
+        operator = (
+            hmac.compare_digest(token_b, operator_token.encode()) if operator_token else False
+        )
         viewer = hmac.compare_digest(token_b, viewer_token.encode()) if viewer_token else False
-        
+
         jwt_user = None
         if not (operator or viewer) and auth_service:
             jwt_user = auth_service.issuer.verify_access_token(token, reads.clock.now())
@@ -134,8 +140,11 @@ def create_http_app(
             raise ApplicationError("UNAUTHORIZED", "Invalid bearer token")
         if request.method == "POST" and not operator:
             raise ApplicationError("FORBIDDEN", "Operator role is required")
-            
-        request.state.user = jwt_user or {"user_id": "static", "role": "operator" if operator else "viewer"}
+
+        request.state.user = jwt_user or {
+            "user_id": "static",
+            "role": "operator" if operator else "viewer",
+        }
 
     def parameters(request, operation):
         query, headers = {}, {}
@@ -150,7 +159,7 @@ def create_http_app(
                 "header": request.headers,
                 "path": request.path_params,
             }[location]
-            
+
             if schema.get("type") == "array":
                 value = source.getlist(name) if hasattr(source, "getlist") else source.get(name)
                 if not value and schema.get("default") is not None:
@@ -159,12 +168,10 @@ def create_http_app(
                 if hasattr(source, "getlist") and len(source.getlist(name)) > 1:
                     raise ApplicationError("VALIDATION_ERROR", "Parameter must occur once", name)
                 value = source.get(name, schema.get("default"))
-                
-            if value is None or (schema.get("type") == "array" and not value):
-                # If array is empty, we treat it as missing if required
-                if not value and schema.get("type") == "array":
-                    value = None
-                
+
+            if schema.get("type") == "array" and not value:
+                value = None
+
             if value is None:
                 if parameter.get("required"):
                     raise ApplicationError(
@@ -179,7 +186,7 @@ def create_http_app(
                 if value.lower() not in ("true", "false"):
                     raise ApplicationError("VALIDATION_ERROR", "Expected true or false", name)
                 value = value.lower() == "true"
-                
+
             if next(contract.validator(schema).iter_errors(value), None):
                 raise ApplicationError(
                     "VALIDATION_ERROR", "Parameter does not match the API contract", name
@@ -204,7 +211,12 @@ def create_http_app(
 
     handlers = {
         "getHealth": lambda p, q: health(),
-        "getNetwork": lambda p, q: {"items": [{**r, "valid_at": q["valid_at"]} for r in reads.active_routes(reads.network(q["network_revision_id"]), q["valid_at"])]},
+        "getNetwork": lambda p, q: {
+            "items": [
+                {**r, "valid_at": q["valid_at"]}
+                for r in reads.active_routes(reads.network(q["network_revision_id"]), q["valid_at"])
+            ]
+        },
         "getCapabilities": lambda p, q: reads.capabilities(q),
         "getDataStatus": lambda p, q: reads.data_status(),
         "listRoutes": lambda p, q: reads.routes(q),
@@ -255,6 +267,7 @@ def create_http_app(
                     ) from exc
                 if operation["operationId"] in commands:
                     import inspect
+
                     func = commands[operation["operationId"]]
                     sig = inspect.signature(func)
                     if len(sig.parameters) == 3:
@@ -268,15 +281,16 @@ def create_http_app(
                     status_code=202 if created else 200,
                     headers={"Location": f"/api/v1/forecast-runs/{run['id']}", "Retry-After": "2"},
                 )
-            
+
             import inspect
+
             func = handlers[operation["operationId"]]
             sig = inspect.signature(func)
             if len(sig.parameters) == 3:
                 result = await run_in_threadpool(func, request.path_params, query, request)
             else:
                 result = await run_in_threadpool(func, request.path_params, query)
-                
+
             if operation["operationId"] == "getForecastRun" and result["status"] in (
                 "queued",
                 "running",

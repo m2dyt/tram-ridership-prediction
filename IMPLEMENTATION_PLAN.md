@@ -121,6 +121,8 @@
 | Операция | Тело/вход | Ответ 200 | Ошибки |
 | --- | --- | --- | --- |
 | `POST /auth/login` (`security: []`, публичная) | `{"username","password"}` | `{"access_token","token_type":"bearer","expires_in","role","user":{"id","username"}}`; refresh — `Set-Cookie: tram_refresh=…; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` | `400` неверное тело, `401 UNAUTHORIZED` неверные логин/пароль (без уточнения, какое поле неверно), `429 RATE_LIMITED` при повторных неудачных попытках |
+
+Для `/auth/login` лимит составляет пять неудачных попыток на пару «логин + IP» за 15 минут от первой попытки. Следующий запрос получает `429` и `Retry-After` в секундах; успешный вход сбрасывает счётчик. Неизвестные и отключённые пользователи проходят то же правило. Счётчики хранятся в БД и истекают через 15 минут.
 | `POST /auth/refresh` (авторизация — cookie `tram_refresh`, не Bearer) | тело не требуется | новый `access_token` (как выше); refresh-cookie ротируется (старое значение отзывается) | `401 UNAUTHORIZED` — просрочен/отозван/отсутствует; фронт трактует как разлогин |
 | `POST /auth/logout` (cookie `tram_refresh`) | необязательно `{"everywhere":bool}` | `204`, отзыв refresh-сессии (или всех сессий пользователя), `Set-Cookie` с `Max-Age=0` | безопасно вызывать без активной сессии |
 | `GET /auth/me` (Bearer, viewer/operator) | — | `{"id","username","role","issued_at","expires_at"}` | `401` истёкший/невалидный access-токен |
@@ -167,6 +169,7 @@
 | AUTH4 | `authorize()` принимает статический токен и JWT; операции `/auth/login|refresh|logout|me` в `openapi.yaml`, `extensions.py`, `app.py` | `tests/test_api.py` покрывает оба пути авторизации; `browser_server.py`/`TESTING.md` не сломаны |
 | AUTH5 | Frontend: форма логина в `App.jsx` вместо поля «ключ», silent-refresh, `/auth/me` для отображения роли | Ручной сценарий `TESTING.md` пройден с реальным логином; ключ operator/viewer остаётся рабочим fallback'ом |
 | AUTH6 | ADR 0003 (авторизация: JWT + refresh-cookie + argon2, сосуществование со статическими токенами) после согласования §6 | ADR принят, ссылка добавлена в `docs/decisions/README.md` |
+| AUTH7 | Ограничить неудачные попытки `/auth/login` по паре логин + IP | После пяти ошибок за 15 минут API возвращает `429` с `Retry-After`; счётчик общий для процессов и сбрасывается после успешного входа |
 | MAP1 | `GET /network` — `RouteDetail[]` для всех активных маршрутов одним вызовом | Один запрос заменяет N обращений к `GET /routes/{id}`; ответ валиден по новой схеме `NetworkPage` |
 | MAP2 | `route_id` через запятую на `/observations`, `/forecast-runs`, `/forecast-runs/{id}/points`, `/forecast-runs/{id}/map`, `/evaluations/{id}/points` | Один запрос отдаёт данные нескольких видимых на карте маршрутов; лимит согласован с `max_routes_per_run` |
 | MAP3 | `GET /forecast-runs?active=true`, `ForecastRunPage.recommended_poll_seconds` | `Map.jsx` показывает бейдж «прогноз считается» по видимым маршрутам без ручного выбора `run_id` |

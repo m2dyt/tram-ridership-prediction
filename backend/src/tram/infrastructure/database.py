@@ -210,9 +210,7 @@ class UserRow(Base):
     role: Mapped[str] = mapped_column(String(32))
     is_active: Mapped[bool] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(Timestamp())
-    __table_args__ = (
-        CheckConstraint("role IN ('viewer','operator')", name="user_role"),
-    )
+    __table_args__ = (CheckConstraint("role IN ('viewer','operator')", name="user_role"),)
 
 
 class RefreshTokenRow(Base):
@@ -224,6 +222,14 @@ class RefreshTokenRow(Base):
     expires_at: Mapped[datetime] = mapped_column(Timestamp())
     revoked_at: Mapped[datetime | None] = mapped_column(Timestamp())
     replaced_by: Mapped[str | None] = mapped_column(ForeignKey("refresh_tokens.id"))
+
+
+class LoginAttemptRow(Base):
+    __tablename__ = "login_attempts"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer)
+    window_started_at: Mapped[datetime] = mapped_column(Timestamp(), index=True)
+    __table_args__ = (CheckConstraint("attempts >= 0", name="login_attempt_count"),)
 
 
 def make_engine(url: str):

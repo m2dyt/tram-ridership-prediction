@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from tram.api.app import create_http_app
@@ -32,15 +34,23 @@ def api():
     context_reads, context_commands = context_bindings(
         ContextService(SqlSnapshotStore(sessions), ExternalSources(), clock, reads)
     )
-    from tram.application.auth import AuthService
-    from tram.infrastructure.auth import SqlUserRepository, SqlSessionStore, Argon2PasswordHasher, JwtTokenIssuer
     from tram.api.extensions import auth_bindings
-    
+    from tram.api.models import get_model, list_models
+    from tram.application.auth import AuthService
+    from tram.infrastructure.auth import (
+        Argon2PasswordHasher,
+        JwtTokenIssuer,
+        SqlSessionStore,
+        SqlUserRepository,
+    )
+    from tram.infrastructure.login_attempts import SqlLoginAttemptStore
+
     auth_service = AuthService(
         users=SqlUserRepository(sessions),
         sessions=SqlSessionStore(sessions),
+        attempts=SqlLoginAttemptStore(sessions, "test-rate-limit-secret"),
         hasher=Argon2PasswordHasher(),
-        issuer=JwtTokenIssuer("secret"),
+        issuer=JwtTokenIssuer("s" * 32),
         clock=clock,
         access_ttl=900,
         refresh_ttl=86400,
@@ -48,6 +58,12 @@ def api():
     auth_reads, auth_commands = auth_bindings(auth_service)
     extra_reads.update(context_reads)
     extra_reads.update(auth_reads)
+    extra_reads.update(
+        {
+            "listModels": lambda p, q: list_models(ROOT / "models" / "tram"),
+            "getModel": lambda p, q: get_model(ROOT / "models" / "tram", p["model_id"]),
+        }
+    )
     extra_commands.update(context_commands)
     extra_commands.update(auth_commands)
     app = create_http_app(
@@ -99,7 +115,12 @@ def test_catalog_auth_errors_and_swagger(api):
     checked(api, "GET", "/capabilities", role=None, status=401)
     checked(api, "GET", "/capabilities")
     checked(api, "GET", "/data-status")
-    checked(api, "GET", "/network", params={"network_revision_id": "demo-network-v1"})
+    checked(
+        api,
+        "GET",
+        "/network",
+        params={"network_revision_id": "demo-network-v1", "valid_at": "2026-09-21"},
+    )
     query = {"network_revision_id": "demo-network-v1", "valid_at": "2026-09-21"}
     checked(api, "GET", "/routes", params=query)
     checked(api, "GET", "/routes/demo-route-01", params=query)
@@ -272,15 +293,18 @@ def test_observations_reject_invalid_timestamps(api, invalid_time):
     checked(api, "GET", "/observations", params=query)
     checked(api, "GET", "/observations", params={**query, "from": invalid_time}, status=422)
 
+
 def test_jwt_authorization_flow(api):
     client, _, _ = api
-    
+
     # 1. We can use the static token first
     response = client.get("/api/v1/capabilities", headers={"Authorization": "Bearer " + "v" * 32})
     assert response.status_code == 200
 
     # 2. Login with seeded testuser
-    response = client.post("/api/v1/auth/login", json={"username": "testuser", "password": "password"})
+    response = client.post(
+        "/api/v1/auth/login", json={"username": "testuser", "password": "password"}
+    )
     assert response.status_code == 200, response.json()
     data = response.json()
     access_token = data["access_token"]
@@ -288,7 +312,9 @@ def test_jwt_authorization_flow(api):
     refresh_token = response.cookies["tram_refresh"]
 
     # 3. Use the JWT access token to get capabilities
-    response = client.get("/api/v1/capabilities", headers={"Authorization": f"Bearer {access_token}"})
+    response = client.get(
+        "/api/v1/capabilities", headers={"Authorization": f"Bearer {access_token}"}
+    )
     assert response.status_code == 200
 
     # 4. Get user info
@@ -302,5 +328,81 @@ def test_jwt_authorization_flow(api):
 
     # 7. Logout
     new_refresh = response.cookies.get("tram_refresh", refresh_token)
-    response = client.post("/api/v1/auth/logout", cookies={"tram_refresh": new_refresh}, json={"everywhere": False})
+    response = client.post(
+        "/api/v1/auth/logout", cookies={"tram_refresh": new_refresh}, json={"everywhere": False}
+    )
     assert response.status_code == 204
+
+
+def test_login_attempt_limit_and_retry_after(api):
+    payload = {"username": "testuser", "password": "wrong"}
+    for _ in range(5):
+        response = checked(api, "POST", "/auth/login", role=None, json=payload, status=401)
+        assert response.json()["message"] == "Invalid credentials"
+
+    response = checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+        status=429,
+    )
+    assert response.json()["code"] == "RATE_LIMITED"
+    assert response.headers["Retry-After"] == "900"
+    assert "tram_refresh" not in response.cookies
+
+    api[2].clock.value += timedelta(minutes=15)
+    checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+    )
+
+
+def test_login_attempt_limit_includes_unknown_user_and_ignores_forwarded_ip(api):
+    for index in range(5):
+        checked(
+            api,
+            "POST",
+            "/auth/login",
+            role=None,
+            json={"username": "missing", "password": "wrong"},
+            headers={"X-Forwarded-For": f"192.0.2.{index + 1}"},
+            status=401,
+        )
+    response = checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "missing", "password": "wrong"},
+        headers={"X-Forwarded-For": "192.0.2.99"},
+        status=429,
+    )
+    assert response.headers["Retry-After"] == "900"
+    checked(
+        api, "POST", "/auth/login", role=None, json={"username": "testuser", "password": "password"}
+    )
+
+
+def test_login_attempt_limit_is_scoped_to_client_ip(api):
+    payload = {"username": "testuser", "password": "wrong"}
+    for _ in range(5):
+        checked(api, "POST", "/auth/login", role=None, json=payload, status=401)
+
+    with TestClient(api[0].app, client=("198.51.100.2", 50000)) as other_client:
+        response = other_client.post(
+            "/api/v1/auth/login", json={"username": "testuser", "password": "password"}
+        )
+    assert response.status_code == 200
+    checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+        status=429,
+    )
