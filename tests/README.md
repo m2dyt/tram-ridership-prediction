@@ -16,7 +16,7 @@
 | [browser_server.py](browser_server.py) | Изолированный UI smoke: временная SQLite, публичные тестовые ключи, демо, отчёты и worker без .env. |
 | [support.py](support.py) | Общие доверенные синтетические фикстуры и фиксированные часы тестов. |
 | [test_aggregation.py](test_aggregation.py) | Взвешивание по времени/вместимости, границы интервалов и публикация estimated-экспорта. |
-| [test_api.py](test_api.py) | Контракт всех базовых HTTP-операций, авторизация, ошибки, строгий JSON и полный forecast pipeline. |
+| [test_api.py](test_api.py) | Контракт HTTP-операций, авторизация, ошибки, полный forecast pipeline и исправные/повреждённые бандлы в реестре моделей. |
 | [test_bootstrap.py](test_bootstrap.py) | Миграции up/down и metadata, направление зависимостей, согласованность Python-зависимостей. |
 | [test_context.py](test_context.py) | Фикстуры провайдеров, редактирование секретов из ошибок, as_of-признаки и импорт GeoJSON. |
 | [test_domain_ml.py](test_domain_ml.py) | Предметные интервалы/ключи, сезонная база, folds и граничные случаи метрик. |
@@ -35,5 +35,4 @@
 | [test_tram_training_modules.py](test_tram_training_modules.py) | Модули обучения трамвая: сетка, профили, метрика WAPE-score, CatBoost/HistGradientBoosting модели. |
 | [test_weather_and_calendar.py](test_weather_and_calendar.py) | Пайплайны внешних данных: погода 2025 (Open-Meteo) и официальный календарь РФ 2025. |
 | [test_tram_data.py](test_tram_data.py) | Проверка схем данных, семантики нуля/пропусков, первичных ключей, временных сплитов и манифеста. |
-
 

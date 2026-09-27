@@ -114,7 +114,7 @@ Set-Content models/tram/active_version.txt "baseline_v1"
 python -m tram.cli worker --once
 ```
 
-Каждый бандл содержит `manifest.json`, `checksums.json`, веса моделей (`models.joblib` / `profiles.joblib`), `model_card.md` и `environment.json`. При загрузке `ArtifactPredictor` валидирует контрольные суммы SHA-256. В случае повреждения или отсутствия бандла происходит автоматический fallback на `SeasonalNaive`.
+Каждый бандл содержит `manifest.json`, `estimator.joblib`, `features.json`, `config.json`, `metrics.json` и `model-card.md`. Манифест формата `1.0` хранит SHA-256 четырёх артефактов: оценщика, признаков, конфигурации и метрик. При загрузке `ArtifactPredictor` проверяет хеш оценщика и при ошибке переходит на `SeasonalNaive`. HTTP-реестр проверяет также JSON-файлы и показывает повреждённую версию с `status: invalid`; карточка этой версии отвечает `503`.
 
 ## Валидация конкурсного сабмита
 

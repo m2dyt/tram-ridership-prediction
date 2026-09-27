@@ -1,3 +1,6 @@
+import json
+from hashlib import sha256
+
 import pytest
 from fastapi.testclient import TestClient
 from tram.api.app import create_http_app
@@ -23,11 +26,30 @@ from tram.infrastructure.sources import ExternalSources
 from tram.infrastructure.trips import SqlTripStore
 from tram_ml.baseline import SeasonalNaive
 
+from ml.training.tram.bundle import export_model_bundle, set_active_version
 from tests.support import ROOT, FrozenClock, seed_trusted_fixture
 
 
 @pytest.fixture
-def api():
+def models_root(tmp_path):
+    return tmp_path / "models"
+
+
+@pytest.fixture
+def model_bundle(models_root):
+    return export_model_bundle(
+        "baseline_v1",
+        models=None,
+        profiles={},
+        metrics={"wape": 0.1, "wape_score": 0.9, "mae": 2.0},
+        config={"model_type": "baseline", "use_residual": False},
+        models_root=models_root,
+    )
+
+
+@pytest.fixture
+def api(tmp_path):
+    models_root = tmp_path / "models"
     engine = make_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     sessions = session_factory(engine)
@@ -52,12 +74,8 @@ def api():
     auth_reads, auth_commands = auth_bindings(auth_service)
     extra_reads.update(context_reads)
     extra_reads.update(auth_reads)
-    extra_reads.update(
-        {
-            "listModels": lambda p, q: list_models(ROOT / "models" / "tram"),
-            "getModel": lambda p, q: get_model(ROOT / "models" / "tram", p["model_id"]),
-        }
-    )
+    extra_reads["listModels"] = lambda p, q: list_models(models_root)
+    extra_reads["getModel"] = lambda p, q: get_model(models_root, p["model_id"])
     extra_commands.update(context_commands)
     extra_commands.update(auth_commands)
     app = create_http_app(
@@ -128,6 +146,186 @@ def test_catalog_auth_errors_and_swagger(api):
     checked(api, "GET", "/evaluations/00000000-0000-4000-8000-000000000001", status=404)
     assert api[0].get("/docs").status_code == 200
     assert api[0].get("/openapi.json").json() == api[1].document
+
+
+def test_model_registry_reads_valid_bundle_and_reports_missing_version(
+    api, models_root, model_bundle
+):
+    set_active_version("baseline_v1", models_root=models_root)
+    items = checked(api, "GET", "/models").json()["items"]
+    assert len(items) == 1
+    assert items[0]["status"] == "available"
+    assert items[0]["is_active"] is True
+    assert items[0]["method"] == "baseline"
+    assert items[0]["metrics"]["wape"] == 0.1
+
+    detail = checked(api, "GET", "/models/baseline_v1").json()
+    assert detail["config"]["model_type"] == "baseline"
+    assert "Model Card" in detail["card"]
+    assert checked(api, "GET", "/models/absent", status=404).json()["code"] == "NOT_FOUND"
+
+
+def test_model_registry_marks_incomplete_bundle_and_preserves_valid_one(
+    api, models_root, model_bundle
+):
+    (models_root / "unfinished_v1").mkdir()
+    items = checked(api, "GET", "/models").json()["items"]
+    assert [(item["id"], item["status"]) for item in items] == [
+        ("baseline_v1", "available"),
+        ("unfinished_v1", "invalid"),
+    ]
+    assert "manifest.json" in items[1]["error"]
+    response = checked(api, "GET", "/models/unfinished_v1", status=503)
+    assert response.json()["code"] == "SERVICE_UNAVAILABLE"
+    assert str(models_root) not in response.text
+
+
+@pytest.mark.parametrize(
+    "filename", ["manifest.json", "config.json", "metrics.json", "features.json"]
+)
+def test_model_registry_rejects_broken_json(api, model_bundle, filename):
+    (model_bundle / filename).write_text("{broken", encoding="utf-8")
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+    assert filename in item["error"]
+    checked(api, "GET", "/models/baseline_v1", status=503)
+
+
+@pytest.mark.parametrize("field,value", [("version", "other_v1"), ("format_version", "2.0")])
+def test_model_registry_rejects_mismatched_version_and_format(api, model_bundle, field, value):
+    manifest_path = model_bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+    checked(api, "GET", "/models/baseline_v1", status=503)
+
+
+def test_model_registry_rejects_checksum_mismatch(api, model_bundle):
+    (model_bundle / "metrics.json").write_text('{"wape": 0.2}', encoding="utf-8")
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+    assert "metrics.json" in item["error"]
+
+
+@pytest.mark.parametrize(
+    "field,value", [("estimator_size_bytes", 1), ("artifacts", []), ("created_at", None)]
+)
+def test_model_registry_rejects_incomplete_manifest(api, model_bundle, field, value):
+    manifest_path = model_bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    "filename", ["estimator.joblib", "config.json", "metrics.json", "model-card.md"]
+)
+def test_model_registry_rejects_missing_bundle_file(api, model_bundle, filename):
+    (model_bundle / filename).unlink()
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+    assert filename in item["error"]
+
+
+@pytest.mark.parametrize(
+    "filename,content",
+    [
+        ("config.json", "[]"),
+        ("config.json", '{"model_type": "baseline", "model_type": "other"}'),
+        ("features.json", '{"feature_cols": "route"}'),
+        (
+            "features.json",
+            '{"feature_cols": ["route"], "categorical_features": [], "base_profile_col": "baseline"}',
+        ),
+        ("metrics.json", '{"wape": NaN}'),
+    ],
+)
+def test_model_registry_rejects_invalid_json_structure(api, model_bundle, filename, content):
+    artifact_path = model_bundle / filename
+    artifact_path.write_text(content, encoding="utf-8")
+    manifest_path = model_bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for artifact in manifest["artifacts"]:
+        if artifact["file"] == filename:
+            artifact["sha256"] = sha256(artifact_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["status"] == "invalid"
+    assert filename in item["error"]
+
+
+def test_model_registry_rejects_unsafe_directory(api, models_root, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    models_root.mkdir()
+    (models_root / "linked_v1").symlink_to(outside, target_is_directory=True)
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["id"] == "linked_v1"
+    assert item["status"] == "invalid"
+    checked(api, "GET", "/models/linked_v1", status=503)
+
+
+def test_model_registry_reports_invalid_directory_name_consistently(api, models_root):
+    models_root.mkdir()
+    (models_root / "bad version").mkdir()
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["id"] == "bad version"
+    assert item["status"] == "invalid"
+    checked(api, "GET", "/models/bad%20version", status=503)
+
+
+def test_model_registry_reports_directory_named_like_active_pointer(api, models_root):
+    models_root.mkdir()
+    (models_root / "active_version.txt").mkdir()
+    response = checked(api, "GET", "/models")
+    assert [(item["id"], item["status"]) for item in response.json()["items"]] == [
+        ("active_version.txt", "invalid")
+    ]
+    checked(api, "GET", "/models/active_version.txt", status=503)
+
+
+def test_model_registry_marks_missing_active_bundle(api, models_root):
+    set_active_version("missing_v1", models_root=models_root)
+    item = checked(api, "GET", "/models").json()["items"][0]
+    assert item["id"] == "missing_v1"
+    assert item["is_active"] is True
+    assert item["status"] == "invalid"
+    assert "missing" in item["error"]
+
+
+@pytest.mark.parametrize(
+    "pointer_kind,error",
+    [
+        ("symlink", "unsafe active_version.txt"),
+        ("empty", "invalid active_version.txt"),
+        ("bad_utf8", "invalid active_version.txt"),
+    ],
+)
+def test_model_registry_keeps_healthy_bundle_visible_with_bad_active_pointer(
+    api, models_root, model_bundle, tmp_path, pointer_kind, error
+):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    pointer = models_root / "active_version.txt"
+    if pointer_kind == "symlink":
+        pointer.symlink_to(outside)
+    elif pointer_kind == "empty":
+        pointer.write_text("", encoding="utf-8")
+    else:
+        pointer.write_bytes(b"\xff")
+    response = checked(api, "GET", "/models")
+    assert [(item["id"], item["status"]) for item in response.json()["items"]] == [
+        ("baseline_v1", "available")
+    ]
+    assert response.json()["active_version_error"] == error
+    detail = checked(api, "GET", "/models/baseline_v1").json()
+    assert detail["status"] == "available"
+    assert detail["active_version_error"] == error
+    assert "secret" not in response.text
 
 
 @pytest.mark.parametrize(
