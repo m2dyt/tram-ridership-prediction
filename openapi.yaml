@@ -690,6 +690,41 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /models:
+    get:
+      tags:
+      - Models
+      operationId: listModels
+      summary: Список ML-моделей
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelPage'
+  /models/{model_id}:
+    get:
+      tags:
+      - Models
+      operationId: getModel
+      summary: Карточка ML-модели
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
   /evaluations:
     get:
       tags:
@@ -3054,6 +3089,54 @@ components:
           $ref: '#/components/schemas/Page'
       description: GeoJSON с дополнительными членами run/page. Ровно один сохранённый интервал. Значения совпадают
         с /points при тех же фильтрах; никакой скрытой агрегации. Нужно получить все страницы.
+    ModelSummary:
+      type: object
+      required:
+      - id
+      - version
+      - method
+      - is_active
+      - is_baseline
+      - metrics
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        method:
+          type: string
+        is_active:
+          type: boolean
+        is_baseline:
+          type: boolean
+        metrics:
+          type: object
+          additionalProperties: true
+    ModelPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelSummary'
+        page:
+          $ref: '#/components/schemas/Page'
+    ModelDetail:
+      allOf:
+      - $ref: '#/components/schemas/ModelSummary'
+      - type: object
+        required:
+        - config
+        - card
+        properties:
+          config:
+            type: object
+            additionalProperties: true
+          card:
+            type: string
     EvaluationSummary:
       type: object
       additionalProperties: false

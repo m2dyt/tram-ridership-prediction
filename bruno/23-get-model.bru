@@ -1,0 +1,15 @@
+meta {
+  name: 23-get-model
+  type: http
+  seq: 23
+}
+
+get {
+  url: http://localhost:8000/api/v1/models/{{model_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

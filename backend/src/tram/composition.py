@@ -51,6 +51,9 @@ def create_app():
     auth_reads, auth_commands = auth_bindings(auth_service)
     extra_reads.update(context_reads)
     extra_reads.update(auth_reads)
+    from tram.api.models import list_models, get_model
+    extra_reads['listModels'] = lambda p, q: list_models(settings.models_root)
+    extra_reads['getModel'] = lambda p, q: get_model(settings.models_root, p['model_id'])
     extra_commands.update(context_commands)
     extra_commands.update(auth_commands)
 
