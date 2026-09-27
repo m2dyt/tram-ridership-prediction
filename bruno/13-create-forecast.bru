@@ -23,7 +23,7 @@ body:json {
 }
 
 script:post-response {
-  if(res.status == 200) {
+  if(res.status == 200 || res.status == 202) {
     bru.setEnvVar('run_id', res.body.id);
   }
 }
