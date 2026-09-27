@@ -68,7 +68,7 @@ def extract_features(
     for sid, points in by_series.items():
         meta = series_meta.get(sid, {})
         station_name = meta.get("station_name", "Unknown")
-        line = meta.get("line", "Unknown")
+        line = meta.get("line_name") or meta.get("line", "Unknown")
         num_entrances = entrances_count.get(station_name, 1)
 
         # Sort points by quarter
@@ -148,6 +148,11 @@ def main(argv: list[str] | None = None) -> int:
         default="incoming",
         help="Target metric to extract features for",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing output directory",
+    )
 
     args = parser.parse_args(argv)
     bundle_dir: Path = args.bundle.resolve()
@@ -155,6 +160,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if not bundle_dir.is_dir():
         print(f"Error: bundle directory not found: {bundle_dir}", file=sys.stderr)
+        return 1
+
+    if output_dir.exists() and any(output_dir.iterdir()) and not args.force:
+        print(
+            f"Error: output directory '{output_dir}' already exists. Pass --force to overwrite.",
+            file=sys.stderr,
+        )
         return 1
 
     try:

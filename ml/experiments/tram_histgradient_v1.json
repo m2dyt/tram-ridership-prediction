@@ -1,0 +1,28 @@
+{
+  "experiment_name": "tram_histgradient_v1",
+  "description": "Sklearn HistGradientBoostingRegressor on residual learning with calendar and Open-Meteo weather",
+  "model_type": "histgradient",
+  "use_residual": true,
+  "per_route": false,
+  "use_weather": true,
+  "hyperparameters": {
+    "loss": "absolute_error",
+    "max_iter": 400,
+    "learning_rate": 0.04,
+    "max_depth": 6,
+    "random_state": 42
+  },
+  "training_window": {
+    "start": "2025-01-01",
+    "end": "2025-08-31"
+  },
+  "validation_window": {
+    "start": "2025-09-01",
+    "end": "2025-10-31"
+  },
+  "test_window": {
+    "start": "2025-11-01",
+    "end": "2025-12-31"
+  },
+  "target": "boardings - hist_median_nonsummer_route_dow_hour"
+}

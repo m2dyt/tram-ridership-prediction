@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 30 * 86400
     allow_static_tokens: bool = True
+    model_version: str | None = None
+    models_root: Path = Path("models/tram")
+    fallback_to_seasonal_naive: bool = True
 
     @model_validator(mode="after")
     def supported_database(self):

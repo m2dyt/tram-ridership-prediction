@@ -21,3 +21,9 @@ httpx>=0.28,<1
 pytest>=8.3,<10
 pytest-cov>=6,<8
 ruff>=0.11,<1
+
+# Optional dependencies for ML training and benchmarking:
+# To install optional gradient boosting training engines (CatBoost, LightGBM):
+#   pip install -e .[training]
+# To install all dependencies (training + dev + benchmark):
+#   pip install -e .[all]

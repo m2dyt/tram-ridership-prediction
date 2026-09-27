@@ -7,6 +7,7 @@ This directory contains two separate forecasting paths. The tram competition scr
 | File | Responsibility |
 |---|---|
 | [`train_tram.py`](train_tram.py) | Tram competition feature preparation, temporal validation, candidate/baseline calculations and submission CSV generation. Audit the input archive, missing-vs-zero semantics and claims in the companion document before treating the output as validated. |
+| [`tram_data.py`](tram_data.py) | Data integrity and validation: schema checks, zero vs missing semantics, temporal split isolation, duplicate prevention, and quality reporting. |
 | [`README_TRAM_TRAINING.md`](README_TRAM_TRAINING.md) | Existing tram command notes. Historical accuracy statements there are unverified; use current data and validation reports before citing a score. |
 | [`prepare.py`](prepare.py) | Convert a metro prepared bundle to a quarterly training feature dataset. |
 | [`train.py`](train.py) | Fit configured quarterly metro candidates and write an artifact/metadata. |

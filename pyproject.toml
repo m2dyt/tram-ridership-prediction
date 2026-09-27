@@ -25,6 +25,28 @@ dependencies = [
   "uvicorn>=0.30,<1",
 ]
 
+[project.optional-dependencies]
+training = [
+  "catboost>=1.2",
+  "lightgbm>=4.3",
+]
+benchmark = [
+  "psutil>=5.9",
+]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+]
+all = [
+  "catboost>=1.2",
+  "lightgbm>=4.3",
+  "psutil>=5.9",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+]
+
 [dependency-groups]
 dev = ["pytest>=8.3,<10", "pytest-cov>=6,<8", "ruff>=0.11,<1"]
 
@@ -36,6 +58,7 @@ packages = ["backend/src/tram", "ml/src/tram_ml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["backend/src", "ml/src", "."]
 addopts = "-ra --strict-markers"
 markers = ["postgres: requires TRAM_TEST_DATABASE_URL pointing to an isolated test database"]
 

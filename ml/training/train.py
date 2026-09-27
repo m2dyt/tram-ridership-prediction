@@ -171,7 +171,7 @@ def build_and_train_hist_gbdt(
         max_iter=max_iter,
         learning_rate=learning_rate,
         max_leaf_nodes=max_leaf_nodes,
-        categorical_features=cat_cols,
+        categorical_features=cat_cols if cat_cols else None,
         random_state=seed,
     )
 
@@ -208,6 +208,11 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Path to save output model version directory",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing output model directory",
+    )
 
     args = parser.parse_args(argv)
     config_path = args.config.resolve()
@@ -215,6 +220,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if not config_path.is_file():
         print(f"Error: config not found: {config_path}", file=sys.stderr)
+        return 1
+
+    if (output_dir / "model.joblib").exists() and not args.force:
+        print(
+            f"Error: model artifact already exists at '{output_dir}'. Pass --force to overwrite.",
+            file=sys.stderr,
+        )
         return 1
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -270,6 +282,36 @@ def main(argv: list[str] | None = None) -> int:
     model_file = output_dir / "model.joblib"
     joblib.dump(model, model_file)
 
+    (output_dir / "features.json").write_text(
+        json.dumps({"feature_columns": feature_cols, "categorical_columns": cat_cols}, indent=2),
+        encoding="utf-8",
+    )
+
+    # Model Card
+    card_content = f"""# Model Card: {output_dir.name}
+
+- **Model Type**: {model_type}
+- **Trained At**: {datetime.now(UTC).isoformat()}
+- **Training Period**: {train_start} to {validation_start.shift(-1)} ({len(train_rows)} samples)
+- **Validation Period**: {validation_start} to {test_start.shift(-1)} ({len(val_rows)} samples)
+- **Validation MAE**: {val_metrics.get("mae")} passengers / quarter
+- **Validation WAPE**: {val_metrics.get("wape") * 100 if val_metrics.get("wape") is not None else "N/A"}%
+
+## Features
+- Numerical: {", ".join(c for c in feature_cols if c not in cat_cols)}
+- Categorical: {", ".join(cat_cols)}
+"""
+    (output_dir / "model-card.md").write_text(card_content, encoding="utf-8")
+
+    import hashlib
+
+    checksums = {
+        "model.joblib": hashlib.sha256(model_file.read_bytes()).hexdigest(),
+        "features.json": hashlib.sha256((output_dir / "features.json").read_bytes()).hexdigest(),
+        "model-card.md": hashlib.sha256((output_dir / "model-card.md").read_bytes()).hexdigest(),
+    }
+    (output_dir / "checksums.json").write_text(json.dumps(checksums, indent=2), encoding="utf-8")
+
     meta = {
         "kind": "trained_model_v1",
         "created_at": datetime.now(UTC).isoformat(),
@@ -288,31 +330,12 @@ def main(argv: list[str] | None = None) -> int:
             "feature_columns": feature_cols,
             "categorical_columns": cat_cols,
         },
+        "checksums": checksums,
     }
 
     (output_dir / "metadata.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    (output_dir / "features.json").write_text(
-        json.dumps({"feature_columns": feature_cols, "categorical_columns": cat_cols}, indent=2),
-        encoding="utf-8",
-    )
-
-    # Model Card
-    card_content = f"""# Model Card: {output_dir.name}
-
-- **Model Type**: {model_type}
-- **Trained At**: {meta["created_at"]}
-- **Training Period**: {train_start} to {validation_start.shift(-1)} ({len(train_rows)} samples)
-- **Validation Period**: {validation_start} to {test_start.shift(-1)} ({len(val_rows)} samples)
-- **Validation MAE**: {val_metrics.get("mae")} passengers / quarter
-- **Validation WAPE**: {val_metrics.get("wape") * 100 if val_metrics.get("wape") is not None else "N/A"}%
-
-## Features
-- Numerical: {", ".join(c for c in feature_cols if c not in cat_cols)}
-- Categorical: {", ".join(cat_cols)}
-"""
-    (output_dir / "model-card.md").write_text(card_content, encoding="utf-8")
 
     print(
         json.dumps(

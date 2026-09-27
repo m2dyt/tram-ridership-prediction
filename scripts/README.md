@@ -12,6 +12,12 @@
 
 | Файл | Назначение |
 |---|---|
+| [benchmark_inference.py](benchmark_inference.py) | Замер задержки (`p50`, `p90`, `p95`, `p99`), пропускной способности (RPS) и памяти для `ArtifactPredictor` и `SeasonalNaive` с записью в `benchmarks/latest.json`. |
+| [validate_submission.py](validate_submission.py) | Строгая валидация сабмита: 14 640 строк, 10 маршрутов, маршрут 5 == 0, разделитель `;`, отсутствие NaN/inf/пропусков, сравнение с baseline. |
+| [fetch_weather_2025.py](fetch_weather_2025.py) | Выгрузка фактической почасовой погоды Москвы за 2025 год через Open-Meteo Archive API в `data/weather_hourly_2025.csv`. |
+| [generate_calendar_2025.py](generate_calendar_2025.py) | Генерация производственного календаря РФ за 2025 год (постановление Правительства № 1335) в `data/calendar_2025.csv`. |
 | [check_docs.py](check_docs.py) | Проверка локальных Markdown-ссылок и наличия назначения каждого файла в README своей папки. |
+| [prepare_tram_challenge.py](prepare_tram_challenge.py) | Аудит, проверка схемы, расчёт SHA-256 хешей конкурсных датасетов и генерация provenance.json и manifest.json. |
 | [download_sources.py](download_sources.py) | Скачивание открытых API (погода, события) и импорт выгрузок data.mos.ru с формированием provenance.json. |
 | [start-component.ps1](start-component.ps1) | Запуск одного локального компонента в текущем терминале с правильным рабочим каталогом. |
+
