@@ -204,7 +204,7 @@ def create_http_app(
 
     handlers = {
         "getHealth": lambda p, q: health(),
-        "getNetwork": lambda p, q: reads.network(q["network_revision_id"]),
+        "getNetwork": lambda p, q: {"items": [{**r, "valid_at": q["valid_at"]} for r in reads.active_routes(reads.network(q["network_revision_id"]), q["valid_at"])]},
         "getCapabilities": lambda p, q: reads.capabilities(q),
         "getDataStatus": lambda p, q: reads.data_status(),
         "listRoutes": lambda p, q: reads.routes(q),

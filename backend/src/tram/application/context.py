@@ -37,6 +37,19 @@ class ContextService:
         self.store.save(document)
         return document
 
+    def geojson(self, snapshot_id: str):
+        doc = self.get(snapshot_id)
+        features = []
+        for r in doc.get('records', []):
+            if 'geometry' in r and r['geometry']:
+                feat = {
+                    "type": "Feature",
+                    "geometry": r["geometry"],
+                    "properties": {k: v for k, v in r.items() if k != "geometry"}
+                }
+                features.append(feat)
+        return {"type": "FeatureCollection", "features": features}
+
     def refresh(self, command):
         delta = parse_time(command["to"]) - parse_time(command["from"])
         if not 0 < delta.total_seconds() <= 7 * 86400:

@@ -23,6 +23,7 @@ def context_bindings(service):
         {
             "listContextSnapshots": lambda p, q: service.list(q),
             "getContextSnapshot": lambda p, q: service.get(p["snapshot_id"]),
+            "getContextSnapshotGeojson": lambda p, q: service.geojson(p["snapshot_id"]),
         },
         {"refreshContext": lambda p, c: service.refresh(c)},
     )
@@ -61,8 +62,8 @@ def auth_bindings(service):
     def logout(p, c, request):
         token = request.cookies.get("tram_refresh")
         service.logout(token, c.get("everywhere", False) if c else False)
-        from fastapi.responses import JSONResponse
-        response = JSONResponse(content={}, status_code=204)
+        from fastapi.responses import Response
+        response = Response(status_code=204)
         response.delete_cookie("tram_refresh", path="/api/v1/auth")
         return response
 

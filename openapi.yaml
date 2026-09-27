@@ -4,52 +4,32 @@ info:
   title: Tram Ridership Prediction API
   version: 0.1.0
   description: 'Исполняемый контракт по SPECIFICATION (2).md и IMPLEMENTATION_PLAN.md.
-
     Реализован backend с сезонной базой без обучения. Все примеры синтетические; реальные идентификаторы и
     качество модели не утверждаются. Отчёты оценки рассчитываются командой evaluate без обучения и сохраняются
     вместе с точками. Инструкция запуска находится в README.md.
-
-
     P0: справочники, история, прогнозы дня/месяца/года, карта, свежесть и проверка на истории.
-
     P1: prediction_interval допускается, но может быть null; переполнение отмечается флагом over_capacity;
     сценарный калькулятор выпуска доступен в /scenarios/fleet.
-
-
     Время: RFC 3339 с обязательным смещением; календарные границы Europe/Moscow, интервалы [start,end).
-
     Все from/to — полные границы шага; start < end. Любой запрос истории/точек ограничен 366 календарными днями.
-
     День/месяц/год — календарный период от forecast_start; отсутствующее число после прибавления месяца/года
     ограничивается последним числом целевого месяца.
-
     Год с месячным шагом начинается первого числа. Поддерживаемые сочетания возвращает capabilities, они не
     декартово произведение перечислений.
-
-
     validations — оплаты; boardings — посадки; occupancy — средняя наполненность одного вагона на участке,
     взвешенная по времени; occupancy_ratio — такое же среднее отношений к вместимости.
-
     validations и boardings суммируются; occupancy и occupancy_ratio никогда не суммируются. Для наполненности
     нужен уровень segment.
-
     Соответствие единиц: validations→validations, boardings/occupancy→passengers, occupancy_ratio→ratio. ratio
     может быть >1.
-
     Направление доступно только при наличии в источнике. Источник и происхождение значения — разные признаки.
-
-
     Клиент закрепляет dataset_revision_id/network_revision_id и run_id между картой и графиком. GET не запускает
     ML.
-
     Неизвестные query-параметры запрещены (422). Для массивов JSON порядок route_ids учитывается при проверке
     идемпотентности; порядок ключей объекта не учитывается.
-
     GET требует viewer или operator, POST — operator; роль определяется конфигурацией Bearer-токена.
-
     Зависимости между полями, принадлежность IDs, порядок дат и числовые границы диапазона проверяются приложением
     дополнительно к JSON Schema.
-
     '
 servers:
 - url: /api/v1
@@ -200,14 +180,14 @@ paths:
       description: Возвращает граф сети для указанной версии.
       parameters:
       - $ref: '#/components/parameters/NetworkRevision'
+      - $ref: '#/components/parameters/ValidAt'
       responses:
         '200':
           description: Полная структура сети
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/NetworkPage'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -1101,6 +1081,29 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /context/snapshots/{snapshot_id}/geojson:
+    get:
+      tags:
+      - Context
+      operationId: getContextSnapshotGeojson
+      summary: GeoJSON-������������� ����
+      parameters:
+      - in: path
+        name: snapshot_id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: �������� �����
+          content:
+            application/geo+json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
   /context/refresh:
     post:
       tags:
@@ -1813,6 +1816,15 @@ components:
             type: string
           uniqueItems: true
       description: Качество источника/расчёта; не заменяет метрики точности модели.
+    NetworkPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteDetail'
     Page:
       type: object
       additionalProperties: false
