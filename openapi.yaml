@@ -59,9 +59,12 @@ paths:
       tags:
       - System
       operationId: getHealth
-      summary: Готовность API и БД
-      description: Публичная проверка готовности без секретов. При недоступности БД возвращает 503 со схемой
-        Health, не Error.
+      summary: Готовность API, БД и модели
+      description: 'Публичная проверка готовности без секретов. 503 со схемой Health (не Error) при недоступной
+        БД, а также когда настроенный бандл модели недействителен и TRAM_FALLBACK_TO_SEASONAL_NAIVE=false.
+        model: not_configured — бандл не настроен, модель запусков — сезонная база; ok — бандл действителен;
+        fallback — бандл недействителен, новые запуски получают сезонную базу с предупреждением; invalid — бандл
+        недействителен и откат запрещён. См. docs/decisions/0004-model-selection-and-fallback.md.'
       parameters: []
       responses:
         '200':
@@ -80,6 +83,8 @@ paths:
                 checked_at: '2026-09-20T18:02:00+03:00'
                 api_version: v1
                 database: up
+                model: not_configured
+                model_version: null
         '503':
           description: API не готов обслуживать запросы.
           headers:
@@ -1303,11 +1308,20 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: false
+                required: [access_token, token_type, expires_in, role, user]
                 properties:
                   access_token: {type: string}
                   token_type: {type: string}
                   expires_in: {type: integer}
                   role: {type: string}
+                  user:
+                    type: object
+                    additionalProperties: false
+                    required: [id, username]
+                    properties:
+                      id: {type: string}
+                      username: {type: string}
         '401':
           $ref: '#/components/responses/Unauthorized'
   /auth/logout:
@@ -2120,6 +2134,8 @@ components:
       - checked_at
       - api_version
       - database
+      - model
+      - model_version
       properties:
         status:
           type: string
@@ -2136,6 +2152,19 @@ components:
           enum:
           - up
           - down
+        model:
+          type: string
+          enum:
+          - not_configured
+          - ok
+          - fallback
+          - invalid
+          description: Состояние обслуживания модели; invalid делает status=unavailable.
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Версия настроенного бандла (TRAM_MODEL_VERSION или active_version.txt), если известна.
     SourceStatus:
       type: object
       additionalProperties: false
@@ -2789,8 +2818,11 @@ components:
           maxLength: 128
         is_baseline:
           type: boolean
-      description: training_history_end <= as_of. Дата реального обучения может быть позднее при воспроизводимом
-        backtesting, но доступность всех данных и подбор модели ограничены as_of.
+      description: 'training_history_end <= as_of. Дата реального обучения может быть позднее при воспроизводимом
+        backtesting, но доступность всех данных и подбор модели ограничены as_of. method: seasonal_naive_v1 —
+        сезонная база из манифеста набора данных; tram_bundle — версионированный бандл models/tram/<version>,
+        version совпадает с версией бандла. Worker исполняет ровно указанную модель; если она недоступна,
+        запуск завершается MODEL_UNAVAILABLE, а не пересчитывается другой моделью.'
     RunFailure:
       type: object
       additionalProperties: false

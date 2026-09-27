@@ -60,7 +60,7 @@ def auth_bindings(service):
             from tram.application.errors import ApplicationError
 
             raise ApplicationError("UNAUTHORIZED", "Missing refresh token")
-        access, access_exp, new_refresh = service.refresh(token)
+        access, access_exp, new_refresh, user = service.refresh(token)
         from fastapi.responses import JSONResponse
 
         response = JSONResponse(
@@ -68,7 +68,8 @@ def auth_bindings(service):
                 "access_token": access,
                 "token_type": "Bearer",
                 "expires_in": int(access_exp.timestamp() - service.clock.now().timestamp()),
-                # Wait, refresh also returns role? Oh, we don't have it easily without user doc. Let's return just access token details, or modify service.refresh to return role.
+                "role": user["role"],
+                "user": {"id": user["id"], "username": user["username"]},
             }
         )
         response.set_cookie(

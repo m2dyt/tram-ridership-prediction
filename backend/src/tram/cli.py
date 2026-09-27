@@ -98,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             "TRAM_VIEWER_TOKEN": secrets.token_urlsafe(32),
             "TRAM_OPERATOR_TOKEN": secrets.token_urlsafe(32),
             "TRAM_CURSOR_SECRET": secrets.token_urlsafe(32),
+            "TRAM_AUTH_TOKEN_SECRET": secrets.token_urlsafe(32),
         }
         try:
             with Path(".env").open("x", encoding="utf-8", newline="\n") as stream:
@@ -152,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         command.upgrade(Config(str(args.config.resolve())), "head")
         return 0
 
-    from tram.composition import build_worker
+    from tram.composition import ModelBundleUnavailable, build_worker
     from tram.infrastructure.settings import Settings
 
     settings = Settings()
@@ -164,6 +165,10 @@ def main(argv: list[str] | None = None) -> int:
                     return 0
                 if not processed:
                     time.sleep(settings.poll_seconds)
+    except ModelBundleUnavailable as error:
+        # Readiness error: the operator required the bundle; do not start degraded.
+        print(f"MODEL_UNAVAILABLE: {error}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 0
 

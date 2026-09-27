@@ -120,7 +120,30 @@ Set-Content models/tram/active_version.txt "baseline_v1"
 python -m tram.cli worker --once
 ```
 
-Каждый бандл содержит `manifest.json`, `estimator.joblib`, `features.json`, `config.json`, `metrics.json` и `model-card.md`. Манифест формата `1.0` хранит SHA-256 четырёх артефактов: оценщика, признаков, конфигурации и метрик. При загрузке `ArtifactPredictor` проверяет хеш оценщика и при ошибке переходит на `SeasonalNaive`. HTTP-реестр проверяет также JSON-файлы и показывает повреждённую версию с `status: invalid`; карточка этой версии отвечает `503`.
+Каждый бандл содержит `manifest.json`, `estimator.joblib`, `features.json`, `config.json`, `metrics.json` и `model-card.md`. Манифест формата `1.0` хранит SHA-256 четырёх артефактов: оценщика, признаков, конфигурации и метрик. HTTP-реестр проверяет также JSON-файлы и показывает повреждённую версию с `status: invalid`; карточка этой версии отвечает `503`.
+
+### Какая модель считает запуск
+
+Модель выбирается один раз при `POST /forecast-runs` и закрепляется в `run.model`; worker исполняет ровно её. Бандл (`method: tram_bundle`, `version` = версия бандла) выбирается, только если одновременно:
+
+- бандл настроен (`TRAM_MODEL_VERSION` или `models/tram/active_version.txt`) и проходит проверку реестра;
+- в `config.json` есть `training_history_end` (RFC 3339 со смещением) и он не позже `as_of` — без этого поля бандл считается недействительным, потому что нельзя проверить утечку будущего;
+- шаг профиля — `hour`, а каждый `route_id` запуска — номер маршрута из `config.json` `routes` (по умолчанию 1, 5, 7, 11, 12, 17, 25, 26, 28, 50);
+- для `catboost`/`lightgbm` установлена соответствующая библиотека (`pip install -e ".[training]"`).
+
+Иначе запуск получает `seasonal_naive_v1` из манифеста набора и предупреждение в `run.warnings` с причиной (`Model bundle … is not used: …`). Если запуск закреплён за бандлом, а worker не может его исполнить (другая загруженная версия, бандл не загрузился, ошибка предсказания), запуск завершается `MODEL_UNAVAILABLE` — он не пересчитывается сезонной базой под именем бандла.
+
+### Недействительный бандл: резерв или ошибка готовности
+
+`TRAM_FALLBACK_TO_SEASONAL_NAIVE` (по умолчанию `true`):
+
+| Ситуация | `true` | `false` |
+|---|---|---|
+| Бандл не настроен | Сезонная база, `/health` → `model: not_configured` | То же |
+| Бандл настроен и действителен | Бандл для подходящих запусков, `/health` → `model: ok` | То же |
+| Бандл настроен, но недействителен | API: новые запуски — сезонная база с предупреждением, `/health` 200 `model: fallback`; worker стартует, пишет ошибку в лог, обслуживает сезонные запуски | API: `/health` 503 `model: invalid`, `POST /forecast-runs` для часовых профилей → 422 `MODEL_UNAVAILABLE`; `tram worker` не стартует (код выхода 1) |
+
+Worker загружает бандл при старте: после смены активной версии перезапустите worker, иначе запуски новой версии завершатся `MODEL_UNAVAILABLE` с подсказкой о перезапуске.
 
 ## Валидация конкурсного сабмита
 
@@ -148,4 +171,15 @@ python scripts/benchmark_inference.py --iterations 10
 - 168 часов (1 неделя, 4 маршрута);
 - 1464 часа (2 месяца, все 10 маршрутов конкурса).
 
-Результаты сохраняются в машиночитаемом формате в `benchmarks/latest.json`.
+Результаты сохраняются в машиночитаемом формате в `benchmarks/latest.json` (ключ `scenarios`). Это прямые вызовы предиктора в процессе — без HTTP, очереди и PostgreSQL.
+
+## Бенчмарк полного серверного пути (API → worker → PostgreSQL)
+
+```powershell
+python -m pip install -e ".[benchmark]"  # psutil, если ещё не установлен
+python -m tram.cli migrate
+python -m tram.cli publish demo-bundle   # или другой опубликованный набор
+python scripts/benchmark_api.py --iterations 15
+```
+
+Поднимает настоящие `uvicorn` (`tram.composition:create_app`) и `tram worker` отдельными процессами против БД из `TRAM_DATABASE_URL`, затем шлёт `N` независимых `POST /forecast-runs` с уникальным `Idempotency-Key`, ждёт `succeeded` реальным поллингом `GET .../{run_id}` и читает `GET .../points`. Пишет отдельно задержку самого `POST` (`submit_latency_ms`), полный путь до готовности (`end_to_end_ms` — включает настоящий `TRAM_POLL_SECONDS` воркера, по умолчанию 2 с, это не оверхед расчёта), задержку чтения точек, RPS по завершённым round trip'ам, ошибки и RSS API/worker-процессов до и после нагрузки. Результат сохраняется в тот же `benchmarks/latest.json` под ключом `server_scenario`, не затирая `scenarios`. Требует достижимый и мигрированный `TRAM_DATABASE_URL`, статический `TRAM_OPERATOR_TOKEN` в `.env` (или включённый `allow_static_tokens`) и опубликованный набор с профилем `availability: available`.

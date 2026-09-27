@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 
 from tram_ml.baseline import SeasonalNaive
@@ -7,6 +8,12 @@ from tram.infrastructure.database import make_engine, session_factory
 from tram.infrastructure.repository import SqlRepository
 from tram.infrastructure.runtime import SystemClock
 from tram.infrastructure.settings import Settings
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ModelBundleUnavailable(RuntimeError):
+    """A bundle is configured but unusable and fallback to the seasonal baseline is off."""
 
 
 def create_app():
@@ -18,6 +25,7 @@ def create_app():
     from tram.api.app import create_http_app
     from tram.api.extensions import auth_bindings, context_bindings, occupancy_bindings
     from tram.application.auth import AuthService
+    from tram.application.models import model_readiness
     from tram.application.occupancy import OccupancyService
     from tram.application.service import ForecastService, ReadService
     from tram.infrastructure.auth import (
@@ -28,6 +36,7 @@ def create_app():
     )
     from tram.infrastructure.contract import Contract
     from tram.infrastructure.login_attempts import SqlLoginAttemptStore
+    from tram.infrastructure.ml.model_catalog import FileModelCatalog
     from tram.infrastructure.runtime import SignedCursor
     from tram.infrastructure.trips import SqlTripStore
 
@@ -38,6 +47,7 @@ def create_app():
     repository = SqlRepository(session_factory(engine))
     clock = SystemClock()
     reads = ReadService(repository, clock, SignedCursor(settings.cursor_secret.get_secret_value()))
+    catalog = FileModelCatalog(settings.models_root, settings.model_version)
 
     auth_service = AuthService(
         users=SqlUserRepository(session_factory(engine)),
@@ -76,7 +86,13 @@ def create_app():
 
     app = create_http_app(
         reads,
-        ForecastService(repository, clock, reads),
+        ForecastService(
+            repository,
+            clock,
+            reads,
+            models=catalog,
+            fallback_to_seasonal_naive=settings.fallback_to_seasonal_naive,
+        ),
         contract,
         viewer_token=settings.viewer_token.get_secret_value()
         if settings.allow_static_tokens and settings.viewer_token
@@ -90,6 +106,9 @@ def create_app():
         extra_reads=extra_reads,
         extra_commands=extra_commands,
         auth_service=auth_service,
+        model_status=lambda: model_readiness(
+            catalog.active_bundle(), settings.fallback_to_seasonal_naive
+        ),
     )
     if settings.frontend_dist.is_dir():
         from fastapi.staticfiles import StaticFiles
@@ -130,27 +149,54 @@ def build_context(settings, sessions, clock, reads):
     )
 
 
+def worker_predictors(settings: Settings):
+    """Predictors keyed by ModelReference.method, plus the bundle description.
+
+    The seasonal baseline is always available: it is the designated model for
+    runs pinned to seasonal_naive_v1, not a silent substitute for a bundle.
+    """
+    from tram.application.models import BUNDLE_METHOD, SEASONAL_METHOD
+    from tram.infrastructure.ml.artifact_predictor import ArtifactPredictor
+    from tram.infrastructure.ml.model_catalog import FileModelCatalog
+
+    bundle = FileModelCatalog(settings.models_root, settings.model_version).active_bundle()
+    predictors = {SEASONAL_METHOD: SeasonalNaive()}
+    if bundle["status"] == "ok":
+        try:
+            predictors[BUNDLE_METHOD] = ArtifactPredictor.from_version(
+                settings.models_root, bundle["version"]
+            )
+        except Exception as exc:  # unpickling, missing libraries, file changed meanwhile
+            bundle = {
+                **bundle,
+                "status": "invalid",
+                "reason": f"estimator could not be loaded ({type(exc).__name__})",
+            }
+    if bundle["status"] == "invalid":
+        message = f"Model bundle {bundle['version'] or '(unset)'} is invalid: {bundle['reason']}"
+        if not settings.fallback_to_seasonal_naive:
+            raise ModelBundleUnavailable(
+                message + "; fallback to the seasonal baseline is disabled"
+            )
+        LOGGER.error("%s; serving seasonal_naive_v1 runs, bundle runs will fail", message)
+    elif bundle["status"] == "ok":
+        LOGGER.info("Serving model bundle %s", bundle["version"])
+    else:
+        LOGGER.info("No model bundle configured; serving seasonal_naive_v1 runs")
+    return predictors, bundle
+
+
 @contextmanager
 def build_worker(settings: Settings):
     """Compose the worker at the process boundary; always release its DB pool."""
-    from tram.infrastructure.ml.artifact_predictor import ArtifactPredictor
-
+    predictors, _ = worker_predictors(settings)
     engine = make_engine(settings.database_url.get_secret_value())
     try:
         repository = SqlRepository(session_factory(engine))
-        fallback = SeasonalNaive()
-        predictor = (
-            ArtifactPredictor.from_active_version(
-                models_root=settings.models_root,
-                fallback=fallback,
-                specific_version=settings.model_version,
-            )
-            or fallback
-        )
         yield RunWorker(
             repository,
             SystemClock(),
-            predictor,
+            predictors,
             lease_seconds=settings.lease_seconds,
             max_attempts=settings.max_attempts,
         )

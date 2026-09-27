@@ -6,7 +6,8 @@ from uuid import uuid4
 
 from tram.application.errors import ApplicationError
 from tram.application.mapping import spatial_from_document
-from tram.application.ports import Clock, CursorCodec, Document, Repository
+from tram.application.models import select_model
+from tram.application.ports import Clock, CursorCodec, Document, ModelCatalog, Repository
 from tram.domain.time import (
     MOSCOW,
     Horizon,
@@ -154,7 +155,9 @@ class ReadService:
                 route_ids = [route_ids]
             if len(route_ids) > 1 and query.get("direction_id"):
                 raise ApplicationError(
-                    "VALIDATION_ERROR", "direction_id is not supported with multiple route_ids", "direction_id"
+                    "VALIDATION_ERROR",
+                    "direction_id is not supported with multiple route_ids",
+                    "direction_id",
                 )
             routes = [self.route(r_id, query) for r_id in route_ids]
         stop_map = {}
@@ -185,14 +188,16 @@ class ReadService:
         route_ids = query.get("route_id")
         if route_ids and not isinstance(route_ids, list):
             route_ids = [route_ids]
-            
+
         dimensions = ("direction_id", "stop_id", "stop_sequence", "segment_id")
         if any(query.get(k) is not None for k in dimensions) and not route_ids:
             raise ApplicationError("VALIDATION_ERROR", "Spatial filters require route_id")
-        
+
         if route_ids and len(route_ids) > 1 and any(query.get(k) is not None for k in dimensions):
-            raise ApplicationError("VALIDATION_ERROR", "Deep spatial filters are not supported for multiple route_ids")
-            
+            raise ApplicationError(
+                "VALIDATION_ERROR", "Deep spatial filters are not supported for multiple route_ids"
+            )
+
         if query.get("stop_sequence") is not None and not query.get("stop_id"):
             raise ApplicationError("VALIDATION_ERROR", "stop_sequence requires stop_id")
         level = profile["spatial_level"]
@@ -206,14 +211,16 @@ class ReadService:
             )
         if not route_ids:
             return
-            
+
         for rid in route_ids:
             route = required(
                 next((r for r in network["routes"] if r["route"]["id"] == rid), None), "Route"
             )
             if rid not in profile["route_ids"]:
-                raise ApplicationError("UNSUPPORTED_PROFILE", "Route is unavailable in this profile")
-                
+                raise ApplicationError(
+                    "UNSUPPORTED_PROFILE", "Route is unavailable in this profile"
+                )
+
             if len(route_ids) == 1:
                 directions = route["directions"]
                 if query.get("direction_id"):
@@ -230,12 +237,17 @@ class ReadService:
                         )
                     directions = selected
                 if query.get("stop_id"):
-                    known = any(s["id"] == query["stop_id"] for r in network["routes"] for s in r["stops"])
+                    known = any(
+                        s["id"] == query["stop_id"] for r in network["routes"] for s in r["stops"]
+                    )
                     if not known:
                         raise ApplicationError("NOT_FOUND", "Stop not found")
                     if not any(
                         s["stop_id"] == query["stop_id"]
-                        and (query.get("stop_sequence") is None or s["sequence"] == query["stop_sequence"])
+                        and (
+                            query.get("stop_sequence") is None
+                            or s["sequence"] == query["stop_sequence"]
+                        )
                         for d in directions
                         for s in d["stops"]
                     ):
@@ -252,9 +264,12 @@ class ReadService:
                     )
                     if not known:
                         raise ApplicationError("NOT_FOUND", "Segment not found")
-                    if not any(s["id"] == query["segment_id"] for d in directions for s in d["segments"]):
+                    if not any(
+                        s["id"] == query["segment_id"] for d in directions for s in d["segments"]
+                    ):
                         raise ApplicationError(
-                            "VALIDATION_ERROR", "Segment does not belong to selected route/direction"
+                            "VALIDATION_ERROR",
+                            "Segment does not belong to selected route/direction",
                         )
 
     def observations(self, query):
@@ -416,9 +431,27 @@ class ReadService:
         return {"summary": summary, "items": items, "page": page}
 
 
+NO_BUNDLE = {
+    "status": "not_configured",
+    "version": None,
+    "reason": None,
+    "model": None,
+    "routes": [],
+}
+
+
 class ForecastService:
-    def __init__(self, repository: Repository, clock: Clock, reads: ReadService):
+    def __init__(
+        self,
+        repository: Repository,
+        clock: Clock,
+        reads: ReadService,
+        models: ModelCatalog | None = None,
+        fallback_to_seasonal_naive: bool = True,
+    ):
         self.repository, self.clock, self.reads = repository, clock, reads
+        self.models = models
+        self.fallback_to_seasonal_naive = fallback_to_seasonal_naive
 
     def create(self, command: Document, owner: str, idempotency_key: str):
         now = self.clock.now()
@@ -469,17 +502,13 @@ class ForecastService:
                 raise ApplicationError(
                     "UNSUPPORTED_PROFILE", "Route is not valid throughout the forecast period"
                 )
-        candidates = [
-            m["model"]
-            for m in dataset["models"]
-            if profile["id"] in m["profile_ids"]
-            and m["model"]["method"] == "seasonal_naive_v1"
-            and parse_time(m["model"]["training_history_end"]) <= as_of
-        ]
-        if not candidates:
-            raise ApplicationError("MODEL_UNAVAILABLE", "No supported model is available at as_of")
-        model = max(
-            candidates, key=lambda m: (parse_time(m["training_history_end"]), m["id"], m["version"])
+        model, warnings = select_model(
+            profile=profile,
+            route_ids=command["route_ids"],
+            as_of=as_of,
+            dataset_models=dataset["models"],
+            bundle=self.models.active_bundle() if self.models else NO_BUNDLE,
+            fallback_to_seasonal_naive=self.fallback_to_seasonal_naive,
         )
         observed = required(
             next(
@@ -520,7 +549,7 @@ class ForecastService:
             "finished_at": None,
             "point_count": 0,
             "quality": {"status": "unverified", "coverage_ratio": None, "flags": []},
-            "warnings": ["Seasonal baseline; no model training was performed"],
+            "warnings": warnings,
             "failure": None,
         }
         return self.repository.create_run(owner, idempotency_key, fingerprint, run, now)

@@ -14,6 +14,7 @@ from ml.training.tram.bundle import (
     get_active_version,
     load_model_bundle,
 )
+from tram.application.models import BUNDLE_METHOD
 from tram.application.ports import Predictor
 from tram.domain.series import Observation, Prediction, SpatialKey
 from tram.domain.time import (
@@ -38,7 +39,18 @@ class ArtifactPredictor:
     ):
         self.bundle = bundle
         self.fallback = fallback
-        self.method = f"tram_bundle_{bundle.version}"
+        # One method name for every bundle; the version is pinned separately in the run.
+        self.method = BUNDLE_METHOD
+        self.version = bundle.version
+
+    @classmethod
+    def from_version(cls, models_root: Path, version: str) -> ArtifactPredictor:
+        """Strictly load one bundle version for the worker.
+
+        No fallback predictor: failures surface as exceptions at startup and as
+        explicit run failures later, never as a seasonal forecast in disguise.
+        """
+        return cls(bundle=load_model_bundle(version, models_root=models_root), fallback=None)
 
     @classmethod
     def from_active_version(

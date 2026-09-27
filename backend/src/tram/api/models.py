@@ -5,31 +5,11 @@ from pathlib import Path
 from tram.application.errors import ApplicationError
 from tram.infrastructure.ml.model_registry import (
     InvalidModelBundle,
+    read_active_pointer,
     read_model_metadata,
-    valid_version,
 )
 
-
-def _active_version(models_root: Path) -> tuple[str | None, str | None]:
-    path = models_root / "active_version.txt"
-    if path.is_symlink():
-        return None, "unsafe active_version.txt"
-    if not path.exists():
-        return None, None
-    try:
-        with path.open("rb") as stream:
-            content = stream.read(257)
-    except OSError:
-        return None, "unreadable active_version.txt"
-    if len(content) > 256:
-        return None, "invalid active_version.txt"
-    try:
-        version = content.decode("utf-8").strip()
-    except UnicodeError:
-        return None, "invalid active_version.txt"
-    if not valid_version(version):
-        return None, "invalid active_version.txt"
-    return version, None
+_active_version = read_active_pointer
 
 
 def _summary(version: str, active_version: str | None, metadata: dict) -> dict:
