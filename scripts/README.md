@@ -12,7 +12,8 @@
 
 | Файл | Назначение |
 |---|---|
-| [benchmark_inference.py](benchmark_inference.py) | Замер задержки (`p50`, `p90`, `p95`, `p99`), пропускной способности (RPS) и памяти для `ArtifactPredictor` и `SeasonalNaive` с записью в `benchmarks/latest.json`. |
+| [benchmark_inference.py](benchmark_inference.py) | Замер задержки (`p50`, `p90`, `p95`, `p99`), пропускной способности (RPS) и памяти для `ArtifactPredictor` и `SeasonalNaive` с записью в `benchmarks/latest.json`. Прямой вызов предиктора в процессе, без HTTP/БД. |
+| [benchmark_api.py](benchmark_api.py) | Тот же набор метрик для полного пути: настоящие `uvicorn` + `tram worker` против реальной PostgreSQL, HTTP `POST /forecast-runs` → поллинг → `GET .../points`; пишет в тот же `benchmarks/latest.json` под ключом `server_scenario`. |
 | [validate_submission.py](validate_submission.py) | Строгая валидация сабмита: 14 640 строк, 10 маршрутов, маршрут 5 == 0, разделитель `;`, отсутствие NaN/inf/пропусков, сравнение с baseline. |
 | [fetch_weather_2025.py](fetch_weather_2025.py) | Выгрузка фактической почасовой погоды Москвы за 2025 год через Open-Meteo Archive API в `data/weather_hourly_2025.csv`. |
 | [generate_calendar_2025.py](generate_calendar_2025.py) | Генерация производственного календаря РФ за 2025 год (постановление Правительства № 1335) в `data/calendar_2025.csv`. |

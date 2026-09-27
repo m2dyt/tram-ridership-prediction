@@ -257,3 +257,32 @@ PR #3 вошёл в `main`.
 **Выполнение:** `application/auth.py::refresh()` возвращает 4-кортеж `(access_token, access_exp, refresh_token, user)`; `api/extensions.py::refresh()` отдаёт `role`/`user` так же, как `login()`; `openapi.yaml` — строгая схема с `user {id, username}`. Новый тест `test_refresh_reflects_current_role_not_login_time_role` проверяет, что смена роли между `login` и `refresh` отражается в следующем `refresh` (не кешируется на момент входа). HTTP-тест `test_jwt_authorization_flow` теперь вызывает `/auth/refresh` через `checked()` и сравнивает `role`/`user` с ответом `login`, а также проверяет отсутствие `password_hash` в теле. Добавлена `docs/decisions/0003-auth-roles-and-static-tokens.md`: публичная регистрация выдаёт только `viewer`, `operator` создаётся отдельным защищённым `POST /auth/operators`, статические токены сосуществуют с JWT без автоматического отключения.
 
 **Проверка:** впервые собрано локальное окружение на этой машине — `python3.12 -m venv .venv`, `pip install -r requirements.txt -e .`; отдельного `.venv` и Docker/PostgreSQL здесь ранее не было. `pytest -q tests/test_auth.py tests/test_api.py` — `62 passed`; полный `pytest -q` — `170 passed, 12 skipped` (пропуски — отсутствующие `TRAM_TEST_DATABASE_URL`, `models/tram/baseline_v1` и файлы обучающих данных, как и раньше). Ruff check/format для четырёх изменённых Python-файлов и `pip check` проходят. `scripts/check_docs.py` остаётся красным по той же причине, что и в шаге 20 (широкий пре-существующий список недокументированных файлов вне этой задачи — включая большой каталог `frontend/brandbook/*` с маркетинговыми макетами, явно не относящийся к бэкенду); ADR 0003 в этом списке не числится — добавлена в `docs/decisions/README.md`. PostgreSQL-профиль не проверялся: Docker Desktop на этой машине не был запущен на момент проверки.
+
+### Шаг 22. Полный серверный benchmark (API → worker → PostgreSQL) — 27.09.2026
+
+**Исходная задача (ревью):** `benchmarks/latest.json` содержал только пять прямых вызовов предиктора в процессе (`scripts/benchmark_inference.py`) — без HTTP, без очереди, без PostgreSQL; `start_rss_mb`/`end_rss_mb` были `null`, потому что `psutil` не был установлен на машине, где считался прошлый отчёт. Нужен отдельный замер настоящего пути `POST /forecast-runs` → воркер → БД под нагрузкой, с p95, пропускной способностью, ошибками и памятью.
+
+**План:** новый скрипт `scripts/benchmark_api.py`, который поднимает настоящий `uvicorn` (`tram.composition:create_app`) и настоящий `tram worker` как отдельные процессы против реальной PostgreSQL, шлёт по HTTP `N` независимых `POST /forecast-runs` (каждый со своим `Idempotency-Key`), ждёт `succeeded` через реальный поллинг `GET .../{run_id}` и читает `GET .../points`; пишет `submit_latency_ms` (одна POST), `end_to_end_ms` (полный путь, включая настоящий интервал опроса воркера — не искусственно уменьшенный), `read_points_ms`, RSS API- и worker-процессов до/после, RPS по полным round trip'ам, ошибки. Результат мержится в `benchmarks/latest.json` под новым ключом `server_scenario`, не затирая существующий `scenarios` от `benchmark_inference.py`.
+
+**Выполнение и препятствия по пути:**
+1. На этой машине не было ни `.venv`, ни запущенного Docker Desktop, ни `.env`. Собрано окружение: `python3.12 -m venv .venv`, `pip install -r requirements.txt -e .`; `open -a Docker` + ожидание демона; `docker compose up -d db --wait`; `python -m tram.cli init-config`.
+2. `tram.cli init-config` создавал только три секрета (`VIEWER_TOKEN`, `OPERATOR_TOKEN`, `CURSOR_SECRET`), а `Settings.require_api_secrets()` уже требует четвёртый — `TRAM_AUTH_TOKEN_SECRET` (добавлен в шаге 21 на `origin/main`). Без него `create_app()`/`serve` падают на старте. Исправлено в `cli.py`: `init-config` теперь генерирует и его.
+3. `python -m tram.cli migrate` до `0005 (head)`, `alembic check` — без расхождений. Опубликован уже готовый `demo-bundle/` (`demo-data-v3-20260927`, профиль `demo-validations-day`, маршрут `demo-route-01`).
+4. `psutil` не входит в базовые зависимости (`pyproject.toml [project.optional-dependencies].benchmark`), только в опциональный extra — первая попытка запуска дала `RSS: null` по той же причине, что и в исходной жалобе. Установлен `pip install -e ".[benchmark]"`.
+5. Аргументы `as_of`/`forecast_start` берутся не из захардкоженных дат, а из `GET /capabilities` на момент запуска (`allowed_as_of_end`/`forecast_start_min` профиля) — иначе скрипт устареет вместе с демо-набором.
+
+**Результат (`benchmarks/latest.json`, ключ `server_scenario`, 15 независимых round trip'ов, `demo-validations-day`, воркер без обученного бандла — `models/tram/` пуст, поэтому обслуживал `SeasonalNaive`, как и заявлено в `forecast-run.model.method`):**
+
+| Метрика | Значение |
+|---|---|
+| Ошибок / таймаутов | 0 / 0 из 15 |
+| `submit_latency_ms` (только `POST`) | p50 18.2, p95 29.2 |
+| `end_to_end_ms` (submit → `succeeded`, включает реальный `poll_seconds=2` воркера) | p50 1963.5, p95 2187.5 |
+| `read_points_ms` (`GET .../points`) | p50 11.9, p95 23.6 |
+| Пропускная способность | 0.49 полных round trip/сек (`wall_clock_s=30.6` на 15 итераций) |
+| RSS API-процесса | 133.7 → 135.0 МБ |
+| RSS worker-процесса | 115.3 → 123.2 МБ |
+
+`end_to_end_ms` почти целиком объясняется интервалом опроса воркера по умолчанию (`TRAM_POLL_SECONDS=2`), а не стоимостью самого расчёта — `submit_latency_ms` и `read_points_ms` (собственно API+SQL) на два порядка быстрее. Это ожидаемо и не является узким местом; отдельно тестировать более частый `poll_seconds` не входило в задачу и не проверялось.
+
+**Проверка:** `pytest -q` — без изменений в тестах на этом шаге, `170 passed, 12 skipped` (см. шаг 21). Ruff check/format для `scripts/benchmark_api.py` и `cli.py` проходят. `python -m alembic check` — без расхождений. PostgreSQL 17.11 в Docker Compose поднят и использован по-настоящему (не SQLite): `docker compose up -d db --wait`, реальные `serve`/`worker` как процессы, реальный HTTP через `httpx`. Ограничение: замер выполнен на одной локальной машине (Apple Silicon, macOS) без обученного model bundle — сравнение с показателями `SeasonalNaive` из `scripts/benchmark_inference.py` (там же, в процессе, без HTTP) не является замером той же величины и не должно интерпретироваться как «оверхед сети/очереди равен разнице»: раздельные `submit_latency_ms`/`read_points_ms` в этом отчёте — более точный источник для такого сравнения.
