@@ -5,17 +5,11 @@ meta {
 }
 
 get {
-  url: http://localhost:8000/api/v1/forecast-runs/{{run_id}}/points
+  url: http://localhost:8000/api/v1/forecast-runs/{{run_id}}/points?from={{as_of_encoded}}&to={{forecast_start_encoded}}
   body: none
   auth: bearer
 }
 
 auth:bearer {
   token: {{token}}
-}
-
-
-query {
-  from: {{as_of}}
-  to: {{forecast_start}}
 }

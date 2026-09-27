@@ -5,16 +5,11 @@ meta {
 }
 
 get {
-  url: http://localhost:8000/api/v1/forecast-runs/{{run_id}}/map
+  url: http://localhost:8000/api/v1/forecast-runs/{{run_id}}/map?interval_start={{forecast_start_encoded}}
   body: none
   auth: bearer
 }
 
 auth:bearer {
   token: {{token}}
-}
-
-
-query {
-  interval_start: {{forecast_start}}
 }
