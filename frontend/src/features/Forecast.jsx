@@ -16,6 +16,7 @@ import {
 } from "../api/hooks";
 import Chart from "../components/Chart.jsx";
 import Map from "../components/Map.jsx";
+import ForecastAggregate from "./ForecastAggregate.jsx";
 import {
   date,
   horizonName,
@@ -308,6 +309,7 @@ function Result({ run, route }) {
           </>
         )}
       </section>
+      <ForecastAggregate run={run} route={route} />
     </>
   );
 }

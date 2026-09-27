@@ -235,6 +235,7 @@ def create_http_app(
         "listForecastRuns": lambda p, q: reads.runs(q),
         "getForecastRun": lambda p, q: reads.get_run(p["run_id"]),
         "getForecastPoints": lambda p, q: reads.points(p["run_id"], q),
+        "getForecastAggregate": lambda p, q: reads.aggregate(p["run_id"], q),
         "getForecastMap": lambda p, q: JSONResponse(
             reads.map(p["run_id"], q), media_type="application/geo+json"
         ),

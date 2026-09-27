@@ -38,3 +38,4 @@
 | [test_tram_training_modules.py](test_tram_training_modules.py) | Модули обучения трамвая: сетка, профили, метрика WAPE-score, CatBoost/HistGradientBoosting модели. |
 | [test_weather_and_calendar.py](test_weather_and_calendar.py) | Пайплайны внешних данных: погода 2025 (Open-Meteo) и официальный календарь РФ 2025. |
 | [test_tram_data.py](test_tram_data.py) | Проверка схем данных, семантики нуля/пропусков, первичных ключей, временных сплитов и манифеста. |
+| [test_forecast_rollup.py](test_forecast_rollup.py) | Агрегация прогноза: суммы и пики, пропуски не как ноль, среднее для неаддитивных показателей, календарные и пространственные группы, запрет неподдерживаемых группировок. |

@@ -8,6 +8,9 @@ from tram.application.errors import ApplicationError
 from tram.application.mapping import spatial_from_document
 from tram.application.models import select_model
 from tram.application.ports import Clock, CursorCodec, Document, ModelCatalog, Repository
+from tram.domain.errors import DomainError
+from tram.domain.rollup import ForecastRollup, GroupBy, check_group_by
+from tram.domain.series import SpatialLevel
 from tram.domain.time import (
     MOSCOW,
     Horizon,
@@ -18,6 +21,9 @@ from tram.domain.time import (
     forecast_window,
     parse_time,
 )
+
+# Rows read per repository call while streaming a run into an aggregate.
+AGGREGATE_BATCH = 5000
 
 
 def required(value, resource="Resource"):
@@ -328,7 +334,11 @@ class ReadService:
             )
         self.validate_spatial(self.network(run["network_revision_id"]), run["profile"], query)
         if query.get("route_id"):
-            requested = query["route_id"] if isinstance(query["route_id"], (list, tuple, set)) else [query["route_id"]]
+            requested = (
+                query["route_id"]
+                if isinstance(query["route_id"], (list, tuple, set))
+                else [query["route_id"]]
+            )
             if not any(r in run["route_ids"] for r in requested):
                 raise ApplicationError("VALIDATION_ERROR", "Route is outside the forecast scope")
         return run
@@ -395,6 +405,57 @@ class ReadService:
             "interval_start": start.isoformat(),
             "interval_end": advance(start, resolution).isoformat(),
             "page": page,
+        }
+
+    def aggregate(self, run_id, query):
+        """Sum (or average, for non-additive metrics) stored points of one run.
+
+        The same filters as /points select the points; nothing is recalculated by a model.
+        """
+        run = self.ready_run(run_id, query)
+        profile = run["profile"]
+        resolution = Resolution(profile["resolution"])
+        period = Interval(parse_time(run["forecast_start"]), parse_time(run["forecast_end"]))
+        window = Interval(
+            parse_time(query["from"]) if query.get("from") else period.start,
+            parse_time(query["to"]) if query.get("to") else period.end,
+        )
+        window.validate_grid(resolution)
+        if window.start < period.start or window.end > period.end:
+            raise ApplicationError(
+                "VALIDATION_ERROR", "Requested interval is outside the forecast period"
+            )
+        group_by = GroupBy(query.get("group_by", GroupBy.NONE))
+        try:
+            check_group_by(group_by, resolution, SpatialLevel(profile["spatial_level"]))
+        except DomainError as exc:
+            raise ApplicationError("UNSUPPORTED_PROFILE", str(exc), "group_by") from exc
+        rollup = ForecastRollup(window, profile["aggregation_method"], group_by)
+        selection = {**query, "from": window.start.isoformat(), "to": window.end.isoformat()}
+        offset = 0
+        while True:
+            rows = self.repository.forecast_points(run_id, selection, offset, AGGREGATE_BATCH)
+            for point in rows:
+                rollup.add(
+                    spatial_from_document(point["spatial"]),
+                    Interval(
+                        parse_time(point["interval_start"]), parse_time(point["interval_end"])
+                    ),
+                    point["value"],
+                )
+            if len(rows) < AGGREGATE_BATCH:
+                break
+            offset += AGGREGATE_BATCH
+        return {
+            "run": run,
+            "from": window.start.isoformat(),
+            "to": window.end.isoformat(),
+            "group_by": group_by.value,
+            "filters": {
+                name: query.get(name)
+                for name in ("route_id", "direction_id", "stop_id", "stop_sequence", "segment_id")
+            },
+            **rollup.result(),
         }
 
     def evaluations(self, query):

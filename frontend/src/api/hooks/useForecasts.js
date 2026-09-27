@@ -34,7 +34,9 @@ export function useForecastRun(runId) {
     queryFn: () => fetchJson(`/forecast-runs/${encodeURIComponent(runId)}`),
     refetchInterval: (query) => {
       const data = query?.state?.data;
-      return (data && (data.status === "queued" || data.status === "running")) ? 2000 : false;
+      return data && (data.status === "queued" || data.status === "running")
+        ? 2000
+        : false;
     },
   });
 }
@@ -44,7 +46,10 @@ export function useForecastPoints(runId, params = {}) {
     queryKey: ["forecast-points", runId, params],
     enabled: !!getToken() && !!runId,
     queryFn: async () => {
-      const data = await fetchJson(`/forecast-runs/${encodeURIComponent(runId)}/points`, { ...params, limit: 1000 });
+      const data = await fetchJson(
+        `/forecast-runs/${encodeURIComponent(runId)}/points`,
+        { ...params, limit: 1000 },
+      );
       return data.items || [];
     },
   });
@@ -54,6 +59,20 @@ export function useForecastMap(runId, params = {}) {
   return useQuery({
     queryKey: ["forecast-map", runId, params],
     enabled: !!getToken() && !!runId && !!params?.interval_start,
-    queryFn: () => fetchJson(`/forecast-runs/${encodeURIComponent(runId)}/map`, params),
+    queryFn: () =>
+      fetchJson(`/forecast-runs/${encodeURIComponent(runId)}/map`, params),
+  });
+}
+
+export function useForecastAggregate(runId, params) {
+  return useQuery({
+    queryKey: ["forecast-aggregate", runId, params],
+    enabled: !!getToken() && !!runId && !!params,
+    placeholderData: (previous) => previous,
+    queryFn: () =>
+      fetchJson(
+        `/forecast-runs/${encodeURIComponent(runId)}/aggregate`,
+        params,
+      ),
   });
 }

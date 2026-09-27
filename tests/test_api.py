@@ -389,6 +389,118 @@ def test_full_forecast_pipeline_and_contract(api, horizon, start):
     checked(api, "GET", "/forecast-runs", params={"status": "succeeded"})
 
 
+def completed_run(api, horizon, start):
+    caps = checked(api, "GET", "/capabilities").json()
+    profile = next(p for p in caps["forecast_profiles"] if p["horizon"] == horizon)
+    command = {
+        "dataset_revision_id": caps["dataset_revision_id"],
+        "profile_id": profile["id"],
+        "route_ids": profile["route_ids"],
+        "as_of": "2026-09-20T18:00:00+03:00",
+        "forecast_start": start + "T00:00:00+03:00",
+    }
+    run = checked(
+        api,
+        "POST",
+        "/forecast-runs",
+        json=command,
+        headers={"Idempotency-Key": "aggregate-" + horizon},
+        role="operator",
+        status=202,
+    ).json()
+    path = "/forecast-runs/" + run["id"]
+    checked(api, "GET", path + "/aggregate", status=409)
+    assert api[2].execute_one()
+    return path, checked(api, "GET", path).json()
+
+
+def all_points(api, path, run, **filters):
+    query = {"from": run["forecast_start"], "to": run["forecast_end"], "limit": 1000, **filters}
+    return checked(api, "GET", path + "/points", params=query).json()["items"]
+
+
+def test_forecast_aggregate_by_route_stop_and_interval(api):
+    path, run = completed_run(api, "day", "2026-09-21")
+    points = all_points(api, path, run)
+    values = [p["value"] for p in points]
+    total = checked(api, "GET", path + "/aggregate").json()
+    assert total["statistic"] == "sum" and total["group_by"] == "none"
+    assert (total["from"], total["to"]) == (run["forecast_start"], run["forecast_end"])
+    assert total["summary"]["value"] == pytest.approx(sum(values))
+    assert total["summary"]["interval_max"] == max(values)
+    assert total["summary"]["point_count"] == len(points) == 24
+    assert total["summary"]["quality"]["status"] == "ok"
+
+    # Interval: morning peak window 07:00–10:00, grouped by hour.
+    window = {"from": "2026-09-21T07:00:00+03:00", "to": "2026-09-21T10:00:00+03:00"}
+    hourly = checked(api, "GET", path + "/aggregate", params={**window, "group_by": "hour"}).json()
+    expected = all_points(api, path, run)[7:10]
+    assert [g["value"] for g in hourly["groups"]] == [p["value"] for p in expected]
+    assert hourly["summary"]["value"] == pytest.approx(sum(p["value"] for p in expected))
+    assert hourly["summary"]["interval_count"] == 3
+
+    # Route and stop filters select the same points as /points.
+    route = run["route_ids"][0]
+    stop = points[0]["spatial"]
+    selected = checked(
+        api,
+        "GET",
+        path + "/aggregate",
+        params={"route_id": route, "stop_id": stop["stop_id"], "group_by": "stop"},
+    ).json()
+    assert selected["filters"]["route_id"] == [route]
+    assert selected["filters"]["stop_id"] == stop["stop_id"]
+    assert selected["summary"]["value"] == total["summary"]["value"]
+    assert [(g["stop_id"], g["stop_sequence"]) for g in selected["groups"]] == [
+        (stop["stop_id"], stop["stop_sequence"])
+    ]
+    by_day = checked(api, "GET", path + "/aggregate", params={"group_by": "day"}).json()
+    assert len(by_day["groups"]) == 1
+    assert by_day["groups"][0]["value"] == total["summary"]["value"]
+
+    # Groupings or filters the profile cannot answer are explicit 422, not silent zeroes.
+    checked(api, "GET", path + "/aggregate", params={"group_by": "segment"}, status=422)
+    checked(api, "GET", path + "/aggregate", params={"group_by": "week"}, status=422)
+    checked(
+        api,
+        "GET",
+        path + "/aggregate",
+        params={"from": "2026-09-20T23:00:00+03:00", "to": "2026-09-21T01:00:00+03:00"},
+        status=422,
+    )
+    checked(
+        api,
+        "GET",
+        path + "/aggregate",
+        params={"from": "2026-09-21T07:30:00+03:00"},
+        status=422,
+    )
+    checked(api, "GET", path + "/aggregate", params={"route_id": "missing"}, status=404)
+
+
+@pytest.mark.parametrize(
+    "horizon,start,group_by,groups",
+    [("month", "2026-09-21", "day", 30), ("year", "2026-10-01", "month", 12)],
+)
+def test_forecast_aggregate_longer_horizons(api, horizon, start, group_by, groups):
+    path, run = completed_run(api, horizon, start)
+    points = all_points(api, path, run)
+    result = checked(api, "GET", path + "/aggregate", params={"group_by": group_by}).json()
+    assert len(result["groups"]) == groups == len(points)
+    assert result["summary"]["value"] == pytest.approx(
+        sum(p["value"] for p in points if p["value"] is not None)
+    )
+    checked(api, "GET", path + "/aggregate", params={"group_by": "hour"}, status=422)
+    checked(api, "GET", path + "/aggregate", params={"group_by": "stop"}, status=422)
+    checked(
+        api,
+        "GET",
+        path + "/aggregate",
+        params={"route_id": run["route_ids"][0], "stop_id": "demo-stop-01"},
+        status=422,
+    )
+
+
 @pytest.mark.parametrize(
     "body,status", [('{"profile_id": 1, "profile_id": 2}', 400), ('{"x": NaN}', 400), ("{}", 422)]
 )
