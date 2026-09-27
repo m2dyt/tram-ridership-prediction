@@ -33,19 +33,25 @@ def main():
         engine = make_engine("sqlite+pysqlite:///" + (root / "smoke.db").as_posix())
         Base.metadata.create_all(engine)
         sessions = session_factory(engine)
-        
-        from tram.infrastructure.database import UserRow
-        from tram.infrastructure.auth import Argon2PasswordHasher
+
         import uuid
+
+        from tram.infrastructure.auth import Argon2PasswordHasher
+        from tram.infrastructure.database import UserRow
+
         with sessions() as session:
-            session.add(UserRow(
-                id=str(uuid.uuid4()),
-                username="testuser",
-                password_hash=Argon2PasswordHasher().hash("password"),
-                role="operator"
-            ))
+            session.add(
+                UserRow(
+                    id=str(uuid.uuid4()),
+                    username="testuser",
+                    password_hash=Argon2PasswordHasher().hash("password"),
+                    role="operator",
+                    is_active=True,
+                    created_at=clock.now(),
+                )
+            )
             session.commit()
-            
+
         manifest, records = read_bundle(root / "demo", contract)
         PublishDataset(SqlDatasetWriter(sessions), clock).execute(manifest, records)
         repo = SqlRepository(sessions)
@@ -82,13 +88,21 @@ def main():
         cr, cc = context_bindings(
             ContextService(SqlSnapshotStore(sessions), ExternalSources(), clock, reads)
         )
-        from tram.application.auth import AuthService
-        from tram.infrastructure.auth import SqlUserRepository, SqlSessionStore, Argon2PasswordHasher, JwtTokenIssuer
         from tram.api.extensions import auth_bindings
-        
+        from tram.api.models import get_model, list_models
+        from tram.application.auth import AuthService
+        from tram.infrastructure.auth import (
+            Argon2PasswordHasher,
+            JwtTokenIssuer,
+            SqlSessionStore,
+            SqlUserRepository,
+        )
+        from tram.infrastructure.login_attempts import SqlLoginAttemptStore
+
         auth_service = AuthService(
             users=SqlUserRepository(sessions),
             sessions=SqlSessionStore(sessions),
+            attempts=SqlLoginAttemptStore(sessions, "browser-test-secret"),
             hasher=Argon2PasswordHasher(),
             issuer=JwtTokenIssuer("browser-test-secret"),
             clock=clock,
@@ -98,9 +112,15 @@ def main():
         ar, ac = auth_bindings(auth_service)
         extra_reads.update(cr)
         extra_reads.update(ar)
+        extra_reads.update(
+            {
+                "listModels": lambda p, q: list_models(Path("models/tram")),
+                "getModel": lambda p, q: get_model(Path("models/tram"), p["model_id"]),
+            }
+        )
         extra_commands.update(cc)
         extra_commands.update(ac)
-        
+
         app = create_http_app(
             reads,
             ForecastService(repo, clock, reads),

@@ -20,8 +20,14 @@ def create_app():
     from tram.application.auth import AuthService
     from tram.application.occupancy import OccupancyService
     from tram.application.service import ForecastService, ReadService
-    from tram.infrastructure.auth import Argon2PasswordHasher, JwtTokenIssuer, SqlSessionStore, SqlUserRepository
+    from tram.infrastructure.auth import (
+        Argon2PasswordHasher,
+        JwtTokenIssuer,
+        SqlSessionStore,
+        SqlUserRepository,
+    )
     from tram.infrastructure.contract import Contract
+    from tram.infrastructure.login_attempts import SqlLoginAttemptStore
     from tram.infrastructure.runtime import SignedCursor
     from tram.infrastructure.trips import SqlTripStore
 
@@ -32,10 +38,13 @@ def create_app():
     repository = SqlRepository(session_factory(engine))
     clock = SystemClock()
     reads = ReadService(repository, clock, SignedCursor(settings.cursor_secret.get_secret_value()))
-    
+
     auth_service = AuthService(
         users=SqlUserRepository(session_factory(engine)),
         sessions=SqlSessionStore(session_factory(engine)),
+        attempts=SqlLoginAttemptStore(
+            session_factory(engine), settings.auth_token_secret.get_secret_value()
+        ),
         hasher=Argon2PasswordHasher(),
         issuer=JwtTokenIssuer(settings.auth_token_secret.get_secret_value()),
         clock=clock,
@@ -51,9 +60,10 @@ def create_app():
     auth_reads, auth_commands = auth_bindings(auth_service)
     extra_reads.update(context_reads)
     extra_reads.update(auth_reads)
-    from tram.api.models import list_models, get_model
-    extra_reads['listModels'] = lambda p, q: list_models(settings.models_root)
-    extra_reads['getModel'] = lambda p, q: get_model(settings.models_root, p['model_id'])
+    from tram.api.models import get_model, list_models
+
+    extra_reads["listModels"] = lambda p, q: list_models(settings.models_root)
+    extra_reads["getModel"] = lambda p, q: get_model(settings.models_root, p["model_id"])
     extra_commands.update(context_commands)
     extra_commands.update(auth_commands)
 
@@ -68,8 +78,12 @@ def create_app():
         reads,
         ForecastService(repository, clock, reads),
         contract,
-        viewer_token=settings.viewer_token.get_secret_value() if settings.allow_static_tokens and settings.viewer_token else "",
-        operator_token=settings.operator_token.get_secret_value() if settings.allow_static_tokens and settings.operator_token else "",
+        viewer_token=settings.viewer_token.get_secret_value()
+        if settings.allow_static_tokens and settings.viewer_token
+        else "",
+        operator_token=settings.operator_token.get_secret_value()
+        if settings.allow_static_tokens and settings.operator_token
+        else "",
         cors_origins=settings.cors_origins,
         lifespan=lifespan,
         unavailable_errors=(OperationalError, PoolTimeout),

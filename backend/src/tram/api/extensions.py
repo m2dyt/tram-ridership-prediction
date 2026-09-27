@@ -30,8 +30,9 @@ def context_bindings(service):
 
 
 def auth_bindings(service):
-    def login(p, c):
-        access, access_exp, refresh, user = service.login(c["username"], c["password"])
+    def login(p, c, request):
+        client_ip = request.client.host if request.client else "unknown"
+        access, access_exp, refresh, user = service.login(c["username"], c["password"], client_ip)
         from fastapi.responses import JSONResponse
 
         response = JSONResponse(
@@ -106,7 +107,7 @@ def auth_bindings(service):
             "authCreateOperator": lambda p, c, r: service.create_operator(
                 c["username"], c["password"]
             ),
-            "authLogin": lambda p, c, r: login(p, c),
+            "authLogin": lambda p, c, r: login(p, c, r),
             "authLogout": lambda p, c, r: logout(p, c, r),
         },
     )

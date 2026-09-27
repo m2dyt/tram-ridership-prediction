@@ -1247,6 +1247,10 @@ paths:
       - Auth
       operationId: authLogin
       summary: Вход по логину/паролю
+      description: >-
+        После пяти неудачных попыток для одной пары логин и IP за 15 минут
+        следующие попытки получают 429 до конца окна. Успешный вход сбрасывает
+        счётчик. IP берётся из соединения; X-Forwarded-For не используется.
       security: []
       requestBody:
         required: true
@@ -1281,6 +1285,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /auth/refresh:
     post:
       tags:

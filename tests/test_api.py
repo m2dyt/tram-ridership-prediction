@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from hashlib import sha256
 
 import pytest
@@ -20,6 +21,7 @@ from tram.infrastructure.auth import (
 from tram.infrastructure.context_store import SqlSnapshotStore
 from tram.infrastructure.contract import Contract
 from tram.infrastructure.database import Base, make_engine, session_factory
+from tram.infrastructure.login_attempts import SqlLoginAttemptStore
 from tram.infrastructure.repository import SqlRepository
 from tram.infrastructure.runtime import SignedCursor
 from tram.infrastructure.sources import ExternalSources
@@ -65,6 +67,7 @@ def api(tmp_path):
     auth_service = AuthService(
         users=SqlUserRepository(sessions),
         sessions=SqlSessionStore(sessions),
+        attempts=SqlLoginAttemptStore(sessions, "test-rate-limit-secret"),
         hasher=Argon2PasswordHasher(),
         issuer=JwtTokenIssuer("s" * 32),
         clock=clock,
@@ -614,7 +617,6 @@ def test_operator_creation_requires_operator_and_creates_operator_user(api):
         headers={"Authorization": f"Bearer {operator_token}"},
         json=second_operator,
     )
-
     checked(
         api,
         "POST",
@@ -623,4 +625,82 @@ def test_operator_creation_requires_operator_and_creates_operator_user(api):
         status=422,
         headers={"Authorization": f"Bearer {operator_token}"},
         json=second_operator,
+    )
+
+
+def test_login_attempt_limit_and_retry_after(api):
+    payload = {"username": "testuser", "password": "wrong"}
+    for _ in range(5):
+        response = checked(api, "POST", "/auth/login", role=None, json=payload, status=401)
+        assert response.json()["message"] == "Invalid credentials"
+
+    response = checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+        status=429,
+    )
+    assert response.json()["code"] == "RATE_LIMITED"
+    assert response.headers["Retry-After"] == "900"
+    assert "tram_refresh" not in response.cookies
+
+    api[2].clock.value += timedelta(minutes=15)
+    checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+    )
+
+
+def test_login_attempt_limit_includes_unknown_user_and_ignores_forwarded_ip(api):
+    for index in range(5):
+        checked(
+            api,
+            "POST",
+            "/auth/login",
+            role=None,
+            json={"username": "missing", "password": "wrong"},
+            headers={"X-Forwarded-For": f"192.0.2.{index + 1}"},
+            status=401,
+        )
+    response = checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "missing", "password": "wrong"},
+        headers={"X-Forwarded-For": "192.0.2.99"},
+        status=429,
+    )
+    assert response.headers["Retry-After"] == "900"
+    checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+    )
+
+
+def test_login_attempt_limit_is_scoped_to_client_ip(api):
+    payload = {"username": "testuser", "password": "wrong"}
+    for _ in range(5):
+        checked(api, "POST", "/auth/login", role=None, json=payload, status=401)
+
+    with TestClient(api[0].app, client=("198.51.100.2", 50000)) as other_client:
+        response = other_client.post(
+            "/api/v1/auth/login", json={"username": "testuser", "password": "password"}
+        )
+    assert response.status_code == 200
+    checked(
+        api,
+        "POST",
+        "/auth/login",
+        role=None,
+        json={"username": "testuser", "password": "password"},
+        status=429,
     )
