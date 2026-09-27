@@ -6,28 +6,33 @@ import {
   ErrorBox,
   ExternalLink,
   Loading,
-  useResource,
 } from "../components/Common.jsx";
+import { useContextSnapshots, useContextSnapshot, useRefreshContext } from "../api/hooks";
 import { date, number, statusName } from "../domain/format.js";
 
-export default function Context({ api, route }) {
-  const [revision, setRevision] = useState(0),
-    [provider, setProvider] = useState("open-meteo"),
+export default function Context({ route }) {
+  const [provider, setProvider] = useState("open-meteo"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(null),
     [id, setId] = useState("");
-  const list = useResource(
-    (signal) => api.all("/context/snapshots", {}, signal),
-    [api, revision],
-  );
+    
+  const listQuery = useContextSnapshots();
+  const list = {
+    data: listQuery.data,
+    loading: listQuery.isLoading,
+    error: listQuery.error
+  };
+
   const selected = id || list.data?.[0]?.id;
-  const detail = useResource(
-    (signal) =>
-      selected
-        ? api.request("/context/snapshots/" + selected, { signal })
-        : null,
-    [api, selected],
-  );
+  
+  const detailQuery = useContextSnapshot(selected);
+  const detail = {
+    data: detailQuery.data,
+    loading: detailQuery.isLoading,
+    error: detailQuery.error
+  };
+  
+  const refreshMutation = useRefreshContext();
   async function refresh() {
     setBusy(true);
     setError(null);
@@ -36,17 +41,15 @@ export default function Context({ api, route }) {
         xy = route.stops.find((s) => s.geometry)?.geometry.coordinates || [
           37.62, 55.75,
         ];
-      const snap = await api.request("/context/refresh", {
-        body: {
-          provider,
-          latitude: xy[1],
-          longitude: xy[0],
-          from: now.toISOString(),
-          to: new Date(now.getTime() + 2 * 86400000).toISOString(),
-        },
+      const snap = await refreshMutation.mutateAsync({
+        provider,
+        latitude: xy[1],
+        longitude: xy[0],
+        from: now.toISOString(),
+        to: new Date(now.getTime() + 2 * 86400000).toISOString(),
       });
       setId(snap.id);
-      setRevision((v) => v + 1);
+      listQuery.refetch();
     } catch (e) {
       setError(e);
     } finally {

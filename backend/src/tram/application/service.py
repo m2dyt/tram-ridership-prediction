@@ -312,8 +312,10 @@ class ReadService:
                 "Forecast results are unavailable",
             )
         self.validate_spatial(self.network(run["network_revision_id"]), run["profile"], query)
-        if query.get("route_id") and query["route_id"] not in run["route_ids"]:
-            raise ApplicationError("VALIDATION_ERROR", "Route is outside the forecast scope")
+        if query.get("route_id"):
+            requested = query["route_id"] if isinstance(query["route_id"], (list, tuple, set)) else [query["route_id"]]
+            if not any(r in run["route_ids"] for r in requested):
+                raise ApplicationError("VALIDATION_ERROR", "Route is outside the forecast scope")
         return run
 
     def points(self, run_id, query):

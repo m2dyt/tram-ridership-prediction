@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { ErrorBox } from "../components/Common.jsx";
 import { number } from "../domain/format.js";
+import { useCalculateFleetScenario } from "../api/hooks";
 
-export default function Fleet({ api }) {
+export default function Fleet() {
   const [values, setValues] = useState({
     passengers_per_hour: 1000,
     vehicle_capacity: 100,
@@ -14,6 +15,9 @@ export default function Fleet({ api }) {
   const [result, setResult] = useState(null),
     [error, setError] = useState(null),
     [busy, setBusy] = useState(false);
+  
+  const calculateScenarioMutation = useCalculateFleetScenario();
+
   const fields = [
     [
       "passengers_per_hour",
@@ -32,7 +36,7 @@ export default function Fleet({ api }) {
     setError(null);
     setBusy(true);
     try {
-      setResult(await api.request("/scenarios/fleet", { body: values }));
+      setResult(await calculateScenarioMutation.mutateAsync(values));
     } catch (e) {
       setError(e);
     } finally {

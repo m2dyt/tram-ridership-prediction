@@ -8,7 +8,7 @@ export const ClusterPoint = ({ isCluster, clusterData }) => {
           width: 32,
           height: 32,
           borderRadius: "50%",
-          background: "var(--mt-red, #ED1C24)",
+          background: "var(--mgt-blue, #0076bc)",
           color: "#fff",
           display: "flex",
           alignItems: "center",
@@ -17,7 +17,7 @@ export const ClusterPoint = ({ isCluster, clusterData }) => {
           fontWeight: 800,
           cursor: "pointer",
           border: "2px solid #fff",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+          boxShadow: "0 2px 8px rgba(0, 118, 188, 0.45)",
         }}
       >
         {clusterData.properties.point_count_abbreviated}
@@ -31,9 +31,9 @@ export const ClusterPoint = ({ isCluster, clusterData }) => {
         width: 16,
         aspectRatio: 1,
         borderRadius: "50%",
-        background: "var(--mt-red, #ED1C24)",
+        background: "var(--mgt-blue, #0076bc)",
         border: "2px solid #fff",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+        boxShadow: "0 1px 6px rgba(0, 118, 188, 0.4)",
       }}
     />
   );

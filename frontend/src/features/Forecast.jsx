@@ -5,8 +5,14 @@ import {
   Empty,
   ErrorBox,
   Loading,
-  useResource,
 } from "../components/Common.jsx";
+import { 
+  useForecastRuns, 
+  useForecastRun, 
+  useCreateForecastRun, 
+  useForecastPoints, 
+  useForecastMap 
+} from "../api/hooks";
 import Chart from "../components/Chart.jsx";
 import Map from "../components/Map.jsx";
 import {
@@ -20,7 +26,7 @@ import {
   unitName,
 } from "../domain/format.js";
 
-export default function Forecast({ api, caps, route }) {
+export default function Forecast({ caps, route }) {
   const profiles = caps.forecast_profiles.filter((p) =>
     p.route_ids.includes(route.route.id),
   );
@@ -29,60 +35,50 @@ export default function Forecast({ api, caps, route }) {
   const [start, setStart] = useState(""),
     [asOf, setAsOf] = useState(""),
     [runId, setRunId] = useState(""),
-    [revision, setRevision] = useState(0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(null);
+    
   useEffect(() => {
     setStart(localInput(profile?.forecast_start_min));
     setAsOf(localInput(profile?.allowed_as_of_end));
     setRunId("");
   }, [profile?.id]);
-  const runs = useResource(
-    (signal) =>
-      profile
-        ? api.all(
-            "/forecast-runs",
-            {
-              dataset_revision_id: caps.dataset_revision_id,
-              profile_id: profile.id,
-              route_id: route.route.id,
-            },
-            signal,
-          )
-        : [],
-    [api, profile?.id, revision, route.route.id],
-  );
+
+  const runsQuery = useForecastRuns(profile ? {
+    dataset_revision_id: caps.dataset_revision_id,
+    profile_id: profile.id,
+    route_id: route.route.id,
+  } : {});
+  const runs = {
+    data: runsQuery.data,
+    loading: runsQuery.isLoading,
+    error: runsQuery.error
+  };
+
   const selectedId = runId || runs.data?.[0]?.id;
-  const [poll, setPoll] = useState(0);
-  const run = useResource(
-    (signal) =>
-      selectedId
-        ? api.request("/forecast-runs/" + selectedId, { signal })
-        : null,
-    [api, selectedId, poll],
-  );
-  useEffect(() => {
-    if (!["queued", "running"].includes(run.data?.status)) return;
-    const timer = setTimeout(() => setPoll((v) => v + 1), 2000);
-    return () => clearTimeout(timer);
-  }, [run.data]);
+  
+  const runQuery = useForecastRun(selectedId);
+  const run = {
+    data: runQuery.data,
+    loading: runQuery.isLoading,
+    error: runQuery.error
+  };
+
+  const createMutation = useCreateForecastRun();
   async function create(e) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const result = await api.request("/forecast-runs", {
-        body: {
-          dataset_revision_id: caps.dataset_revision_id,
-          profile_id: profile.id,
-          route_ids: [route.route.id],
-          as_of: moscowTime(asOf),
-          forecast_start: moscowTime(start),
-        },
-        idempotencyKey: crypto.randomUUID(),
+      const result = await createMutation.mutateAsync({
+        dataset_revision_id: caps.dataset_revision_id,
+        profile_id: profile.id,
+        route_ids: [route.route.id],
+        as_of: moscowTime(asOf),
+        forecast_start: moscowTime(start),
       });
       setRunId(result.id);
-      setRevision((v) => v + 1);
+      runsQuery.refetch();
     } catch (e) {
       setError(e);
     } finally {
@@ -165,8 +161,8 @@ export default function Forecast({ api, caps, route }) {
           <button
             className="secondary"
             onClick={() => {
-              setRevision((v) => v + 1);
-              setPoll((v) => v + 1);
+              runsQuery.refetch();
+              runQuery.refetch();
             }}
           >
             Обновить
@@ -187,7 +183,7 @@ export default function Forecast({ api, caps, route }) {
         </div>
       )}
       {run.data?.status === "succeeded" ? (
-        <Result key={run.data.id} api={api} run={run.data} route={route} />
+        <Result key={run.data.id} run={run.data} route={route} />
       ) : (
         <section className="panel">
           <Map route={route} />
@@ -201,52 +197,47 @@ export default function Forecast({ api, caps, route }) {
   );
 }
 
-function Result({ api, run, route }) {
+function Result({ run, route }) {
   const [index, setIndex] = useState(0),
     [series, setSeries] = useState("");
-  const result = useResource(
-    (signal) =>
-      api.all(
-        `/forecast-runs/${run.id}/points`,
-        {
-          from: run.forecast_start,
-          to: run.forecast_end,
-          route_id: route.route.id,
-        },
-        signal,
-      ),
-    [api, run.id, route.route.id],
-  );
+    
+  const resultQuery = useForecastPoints(run.id, {
+    from: run.forecast_start,
+    to: run.forecast_end,
+    route_id: route.route.id,
+  });
+  const result = {
+    data: resultQuery.data,
+    loading: resultQuery.isLoading,
+    error: resultQuery.error
+  };
+
   const keys = [...new Set((result.data || []).map(seriesKey))];
   const selected = series || keys[0];
   const points = (result.data || []).filter((p) => seriesKey(p) === selected);
   const at = points[index]?.interval_start;
-  const map = useResource(
-    (signal) =>
-      at
-        ? api
-            .all(
-              `/forecast-runs/${run.id}/map`,
-              {
-                ...Object.fromEntries(
-                  Object.entries(points[0].spatial).filter(
-                    ([key]) => key !== "level",
-                  ),
-                ),
-                interval_start: at,
-              },
-              signal,
-              "features",
-            )
-            .then((features) => ({
-              type: "FeatureCollection",
-              features: features.filter(
-                (f) => seriesKey(f.properties) === selected,
-              ),
-            }))
-        : null,
-    [api, run.id, at, route.route.id, selected],
-  );
+  
+  const mapParams = at && points[0]?.spatial ? {
+    ...Object.fromEntries(
+      Object.entries(points[0].spatial).filter(([key]) => key !== "level")
+    ),
+    interval_start: at,
+  } : null;
+  
+  const mapQuery = useForecastMap(run.id, mapParams || {});
+  
+  const mapData = mapQuery.data ? {
+    type: "FeatureCollection",
+    features: (mapQuery.data.features || []).filter(
+      (f) => seriesKey(f.properties) === selected,
+    ),
+  } : null;
+  
+  const map = {
+    data: mapData,
+    loading: mapQuery.isLoading,
+    error: mapQuery.error
+  };
   const values = points.map((p) => p.value).filter((v) => v != null);
   const max = values.length ? Math.max(...values) : null;
   return (

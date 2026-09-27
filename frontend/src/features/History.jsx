@@ -5,7 +5,6 @@ import {
   Empty,
   ErrorBox,
   Loading,
-  useResource,
 } from "../components/Common.jsx";
 import {
   localInput,
@@ -13,8 +12,9 @@ import {
   seriesKey,
   unitName,
 } from "../domain/format.js";
+import { useObservations } from "../api/hooks";
 
-export default function History({ api, caps, route }) {
+export default function History({ caps, route }) {
   const profiles = caps.observation_profiles.filter((p) =>
     p.route_ids.includes(route.route.id),
   );
@@ -35,10 +35,12 @@ export default function History({ api, caps, route }) {
     setQuery(null);
     setSeries("");
   }, [profile?.id]);
-  const result = useResource(
-    (signal) => (query ? api.all("/observations", query, signal) : null),
-    [api, query],
-  );
+  const resultQuery = useObservations(query);
+  const result = {
+    data: resultQuery.data,
+    loading: resultQuery.isLoading,
+    error: resultQuery.error
+  };
   const keys = [...new Set((result.data || []).map(seriesKey))];
   const points = (result.data || []).filter(
     (p) => seriesKey(p) === (series || keys[0]),

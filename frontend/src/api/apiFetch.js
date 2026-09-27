@@ -38,22 +38,21 @@ export async function apiFetch(path, options = {}) {
     headers,
   });
 
-  if (res.status !== 401) {
-      if (!res.ok) {
-          const err = await res.json().catch(() => null);
-          throw new Error(err?.message || "Ошибка API");
-      }
-      return res;
+  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/refresh") {
+    try {
+      const newToken = await refreshSession();
+      const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+      res = await fetch(`${BASE}${path}`, { ...options, headers: retryHeaders });
+    } catch (error) {
+      updateToken(null);
+      throw new Error("Сессия истекла");
+    }
   }
 
-  // 401: Refresh Token fallback
-  try {
-    const newToken = await refreshSession();
-    const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
-    return fetch(`${BASE}${path}`, { ...options, headers: retryHeaders });
-  } catch (error) {
-    updateToken(null);
-    if (typeof window !== "undefined") window.location.href = "/";
-    throw new Error("Сессия истекла");
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.message || `Ошибка API: HTTP ${res.status}`);
   }
+
+  return res;
 }

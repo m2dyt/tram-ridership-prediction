@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Pantograph -->
+  <path d="M36 10 L48 18 L60 10 M48 18 L48 24 M32 10 L64 10" fill="none" stroke="#008dd1" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Tram Body -->
+  <rect x="22" y="24" width="52" height="52" rx="10" fill="none" stroke="#008dd1" stroke-width="5" stroke-linejoin="round"/>
+  <!-- Windshield -->
+  <rect x="30" y="32" width="36" height="22" rx="4" fill="none" stroke="#008dd1" stroke-width="4.5"/>
+  <!-- Route Indicator / Display -->
+  <line x1="38" y1="28" x2="58" y2="28" stroke="#008dd1" stroke-width="3" stroke-linecap="round"/>
+  <!-- Headlights -->
+  <circle cx="34" cy="65" r="4.5" fill="#008dd1"/>
+  <circle cx="62" cy="65" r="4.5" fill="#008dd1"/>
+  <!-- Bumper line -->
+  <line x1="42" y1="65" x2="54" y2="65" stroke="#008dd1" stroke-width="3" stroke-linecap="round"/>
+  <!-- Tram Tracks & Wheel connectors -->
+  <line x1="27" y1="84" x2="27" y2="76" stroke="#008dd1" stroke-width="4" stroke-linecap="round"/>
+  <line x1="69" y1="84" x2="69" y2="76" stroke="#008dd1" stroke-width="4" stroke-linecap="round"/>
+  <line x1="16" y1="86" x2="80" y2="86" stroke="#008dd1" stroke-width="4.5" stroke-linecap="round"/>
+</svg>

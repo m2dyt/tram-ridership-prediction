@@ -52,7 +52,7 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
             id="route-layer"
             type="line"
             paint={{
-              "line-color": "#e30b13", // Цвет МосТранс
+              "line-color": "#0076bc", // Цвет МосТранс
               "line-width": 4,
               "line-opacity": 0.7,
             }}
@@ -68,7 +68,7 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
               "circle-radius": 5,
               "circle-color": "#ffffff",
               "circle-stroke-width": 2,
-              "circle-stroke-color": "#e30b13",
+              "circle-stroke-color": "#0076bc",
             }}
           />
         </Source>
@@ -91,8 +91,8 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
       </MapLibreMap>
 
       <div className="map-key" style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", padding: "5px", borderRadius: "5px" }}>
-        <i style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#e30b13", marginRight: "5px" }} /> Маршрут 
-        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", border: "2px solid #e30b13", marginLeft: "10px", marginRight: "5px" }} /> Остановка 
+        <i style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#0076bc", marginRight: "5px" }} /> Маршрут 
+        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", border: "2px solid #0076bc", marginLeft: "10px", marginRight: "5px" }} /> Остановка 
         <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#cc7a32", marginLeft: "10px", marginRight: "5px" }} /> Объект города
       </div>
     </div>
