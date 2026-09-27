@@ -6,7 +6,7 @@ meta {
 
 post {
   url: http://localhost:8000/api/v1/auth/logout
-  body: none
+  body: json
   auth: bearer
 }
 
@@ -14,3 +14,7 @@ auth:bearer {
   token: {{token}}
 }
 
+
+body:json {
+  {}
+}
