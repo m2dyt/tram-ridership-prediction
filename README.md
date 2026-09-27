@@ -12,9 +12,15 @@
 2. Для команд окружения и запуска используй [локальную установку](docs/LOCAL_SETUP.md) и [операционные команды](docs/OPERATIONS.md).
 3. Папки и файлы описаны в [карте репозитория](docs/FILE_MAP.md); состояние реализации и ограничения — в [STATUS](docs/STATUS.md).
 
+## Запуск полного стека через Docker
+
+На macOS или Linux распакуй архив в корень проекта так, чтобы появились `dataset/labels/labels_day_train.csv`, `dataset/labels/labels_day_test.csv` и `dataset/test_submission.csv`. Затем запусти `sh scripts/start-stack.sh`. Скрипт поднимает PostgreSQL, применяет миграции, публикует факты из меток, обучает почасовую модель на CPU и запускает API с собранным фронтендом и worker.
+
+Открой [http://localhost:8000](http://localhost:8000) и войди как `tram-admin`. Пароль лежит в локальном `.env` под `TRAM_BOOTSTRAP_OPERATOR_PASSWORD`. Подробности команд и проверка числа строк описаны в [запуске Docker](docs/DOCKER_STACK.md).
+
 ## Что уже находится в коде
 
-- **Backend**: FastAPI, SQLAlchemy/PostgreSQL, OpenAPI, очереди и worker, прогнозный `Predictor` port. Worker подключён к `ArtifactPredictor` (`backend/src/tram/infrastructure/ml/artifact_predictor.py`), загружающему активную модель из `models/tram/` с проверкой SHA-256 контрольных сумм и автоматическим fallback на `SeasonalNaive`.
+- **Backend**: FastAPI, PostgreSQL, OpenAPI, очередь заданий и worker. Worker загружает активную модель из `models/tram/`, проверяет SHA-256 и использует `ArtifactPredictor`.
 - **Трамвайный пайплайн**: Модульная архитектура в [`ml/training/tram/`](ml/training/tram/) (`features.py`, `baseline.py`, `models.py`, `evaluation.py`, `bundle.py`, `submission.py`, `cli.py`) с обратной совместимостью через [`ml/training/train_tram.py`](ml/training/train_tram.py).
 - **Внешние данные**: Полный почасовой архив погоды Москвы Open-Meteo за 2025 год (`data/weather_hourly_2025.csv`) и производственный календарь РФ № 1335 (`data/calendar_2025.csv`).
 - **Контроль сабмитов**: Замороженный baseline в `ml/predictions/baseline/`, строгий валидатор [`scripts/validate_submission.py`](scripts/validate_submission.py) (проверка 14 640 строк, 10 маршрутов, нулевого маршрута 5, структуры колонок и отклонений).

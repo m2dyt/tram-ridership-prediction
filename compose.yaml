@@ -10,6 +10,9 @@ x-backend: &backend
   env_file: .env
   environment:
     TRAM_DATABASE_URL: postgresql+psycopg://tram:${TRAM_POSTGRES_PASSWORD:?Run init-config first}@db:5432/tram
+    TRAM_MODELS_ROOT: /app/models/tram
+  volumes:
+    - model-artifacts:/app/models/tram
 
 services:
   db:
@@ -35,6 +38,33 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  bootstrap-operator:
+    <<: *backend
+    profiles: ["setup"]
+    command: ["python", "scripts/bootstrap-operator.py"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dataset-import:
+    <<: *backend
+    profiles: ["setup"]
+    command: ["sh", "scripts/import-dataset.sh"]
+    volumes:
+      - ${TRAM_DATASET_PATH:-./dataset}:/app/dataset:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  train-model:
+    <<: *backend
+    profiles: ["setup"]
+    command: ["sh", "scripts/train-model.sh"]
+    volumes:
+      - ${TRAM_DATASET_PATH:-./dataset}:/app/dataset:ro
+      - model-artifacts:/app/models/tram
+      - training-output:/app/ml/predictions
 
   api:
     <<: *backend
@@ -75,3 +105,5 @@ services:
 
 volumes:
   postgres-data:
+  model-artifacts:
+  training-output:

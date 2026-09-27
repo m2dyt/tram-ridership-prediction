@@ -21,6 +21,6 @@ logs/
 *.log
 .idea/
 .vscode/
-dataset/
+dataset/*
+!dataset/PROJECT_DATA.md
 catboost_info/
-dataset/

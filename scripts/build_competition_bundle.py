@@ -1,298 +1,355 @@
+"""Convert the supplied Moscow tram labels and route catalog into an API bundle."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
 import json
-import csv
-from datetime import datetime, timedelta, date
+import math
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
 import pandas as pd
 
-from tram.infrastructure.contract import Contract
-from tram.infrastructure.bundles import read_bundle
-
 MOSCOW = ZoneInfo("Europe/Moscow")
+ROUTE_NUMBERS = (1, 5, 7, 11, 12, 17, 25, 26, 28, 50)
+DATA_START = date(2025, 1, 1)
+DATA_END = date(2025, 11, 1)  # Exclusive; labels end on 2025-10-31.
+PROFILE_ID = "competition-boardings-route-hour"
 
-def build_bundle(output_dir: Path):
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 1. Load routes & stops
-    with open('frontend/public/moscow_tram_routes.json', 'r', encoding='utf-8') as f:
-        routes_geo = json.load(f)
-    with open('frontend/public/moscow_tram_stops.json', 'r', encoding='utf-8') as f:
-        stops_geo = json.load(f)
 
-    # 10 hackathon routes
-    route_nums = [1, 5, 7, 11, 12, 17, 25, 26, 28, 50]
-    route_ids = [f"hackathon-{n}" for n in route_nums]
+def file_digest(paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.name.encode("utf-8"))
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    return digest.hexdigest()
 
-    # Shared stops dictionary across all routes to prevent conflicting shared stops
-    global_stops = {}
 
+def route_geometry(parts: object) -> dict | None:
+    if not isinstance(parts, list):
+        return None
+    valid_parts = [
+        [[float(point[0]), float(point[1])] for point in part]
+        for part in parts
+        if isinstance(part, list)
+        and len(part) >= 2
+        and all(isinstance(point, list) and len(point) >= 2 for point in part)
+    ]
+    if not valid_parts:
+        return None
+    if len(valid_parts) == 1:
+        return {"type": "LineString", "coordinates": valid_parts[0]}
+    return {"type": "MultiLineString", "coordinates": valid_parts}
+
+
+def build_network(root: Path, network_id: str) -> tuple[dict, dict[str, dict], list[str]]:
+    routes_path = root / "frontend/public/moscow_tram_routes.json"
+    stops_path = root / "frontend/public/moscow_tram_stops.json"
+    route_catalog = json.loads(routes_path.read_text(encoding="utf-8"))
+    stop_catalog = json.loads(stops_path.read_text(encoding="utf-8"))
     network_routes = []
-    for num in route_nums:
-        r_id = f"hackathon-{num}"
-        stops_list = stops_geo.get(str(num), [])
-        
-        # If no stops in json, provide fallback stops
-        if not stops_list:
-            stops_list = [
-                {"id": f"stop-{num}-01", "name": f"Остановка 1 (маршрут {num})", "geometry": {"type": "Point", "coordinates": [37.62, 55.75]}},
-                {"id": f"stop-{num}-02", "name": f"Остановка 2 (маршрут {num})", "geometry": {"type": "Point", "coordinates": [37.63, 55.76]}}
-            ]
-        
+    geometries: dict[str, dict] = {}
+    warnings = []
+
+    for number in ROUTE_NUMBERS:
+        route_id = str(number)
+        geometry = route_geometry(route_catalog.get(route_id))
+        if geometry is None:
+            warnings.append(f"Для маршрута №{number} нет геометрии в справочнике.")
+        else:
+            geometries[route_id] = geometry
+
         route_stops = []
-        for i, s in enumerate(stops_list):
-            s_id = s.get("id") or f"stop-{num}-{i+1}"
-            stop_obj = {
-                "id": s_id,
-                "name": s.get("name") or f"Остановка {i+1}",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                        float(s["geometry"]["coordinates"][0]),
-                        float(s["geometry"]["coordinates"][1])
-                    ]
-                }
-            }
-            # Ensure consistent definition if shared
-            if s_id in global_stops:
-                stop_obj = global_stops[s_id]
-            else:
-                global_stops[s_id] = stop_obj
-            route_stops.append(stop_obj)
-
-        # Build directions and segments
-        direction_stops = []
-        segments = []
-        for idx, s in enumerate(route_stops):
-            direction_stops.append({"stop_id": s["id"], "sequence": idx + 1})
-            if idx > 0:
-                prev_s = route_stops[idx - 1]
-                segments.append({
-                    "id": f"seg-{r_id}-{idx}",
-                    "from_stop_id": prev_s["id"],
-                    "from_sequence": idx,
-                    "to_stop_id": s["id"],
-                    "to_sequence": idx + 1,
+        for index, source_stop in enumerate(stop_catalog.get(route_id, []), start=1):
+            coordinates = source_stop.get("geometry", {}).get("coordinates")
+            if not isinstance(coordinates, list) or len(coordinates) < 2:
+                continue
+            stop_id = str(source_stop.get("id") or f"route-{number}-stop-{index}")
+            route_stops.append(
+                {
+                    "id": stop_id,
+                    "name": str(source_stop.get("name") or stop_id),
                     "geometry": {
-                        "type": "LineString",
-                        "coordinates": [
-                            prev_s["geometry"]["coordinates"],
-                            s["geometry"]["coordinates"]
-                        ]
-                    }
-                })
-
-        directions = [
-            {
-                "id": f"dir-{r_id}-direct",
-                "name": f"Прямое направление № {num}",
-                "stops": direction_stops,
-                "segments": segments,
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": [s["geometry"]["coordinates"] for s in route_stops]
+                        "type": "Point",
+                        "coordinates": [float(coordinates[0]), float(coordinates[1])],
+                    },
                 }
+            )
+
+        route_warnings = []
+        if not route_stops:
+            route_warnings.append("В исходном справочнике нет остановок этого маршрута.")
+            warnings.extend(f"Маршрут №{number}: {warning}" for warning in route_warnings)
+
+        network_routes.append(
+            {
+                "network_revision_id": network_id,
+                "valid_at": DATA_START.isoformat(),
+                "route": {
+                    "id": route_id,
+                    "number": route_id,
+                    "name": f"Трамвай № {number} (Москва)",
+                    "valid_from": DATA_START.isoformat(),
+                    "valid_to": None,
+                },
+                "stops": route_stops,
+                "warnings": route_warnings,
+                "directions": [
+                    {
+                        "id": None,
+                        "name": f"Линия маршрута № {number}",
+                        "stops": [
+                            {"stop_id": stop["id"], "sequence": index}
+                            for index, stop in enumerate(route_stops, start=1)
+                        ],
+                        "segments": [],
+                        "geometry": geometry,
+                    }
+                ],
             }
-        ]
+        )
 
-        network_routes.append({
-            "network_revision_id": "competition-network-v1",
-            "valid_at": "2025-01-01",
-            "route": {
-                "id": r_id,
-                "number": str(num),
-                "name": f"Трамвай № {num} (Москва)",
-                "valid_from": "2025-01-01",
-                "valid_to": None
-            },
-            "stops": route_stops,
-            "warnings": [],
-            "directions": directions
-        })
+    return {"id": network_id, "routes": network_routes}, geometries, warnings
 
-    # Date range for observations: 2025-01-01 to 2025-10-31 (304 days)
-    start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=MOSCOW)
-    end_dt = datetime(2025, 11, 1, 0, 0, 0, tzinfo=MOSCOW) # up to Nov 1
 
-    profile_id = "competition-boardings-route-day"
-    forecast_profile_id = "competition-forecast-month"
+def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[str, int]:
+    labels_paths = [
+        data_dir / "labels/labels_day_train.csv",
+        data_dir / "labels/labels_day_test.csv",
+    ]
+    sample_path = data_dir / "test_submission.csv"
+    static_paths = [
+        project_root / "frontend/public/moscow_tram_routes.json",
+        project_root / "frontend/public/moscow_tram_stops.json",
+    ]
+    missing = [path for path in [*labels_paths, sample_path, *static_paths] if not path.is_file()]
+    if missing:
+        raise FileNotFoundError("Required project data is missing: " + ", ".join(map(str, missing)))
 
+    train, validation = (pd.read_csv(path, sep=";") for path in labels_paths)
+    required = {"route", "date", "hour", "boardings"}
+    for label, frame in (("train", train), ("validation", validation)):
+        if not required <= set(frame.columns):
+            raise ValueError(f"{label} labels must contain {sorted(required)}")
+        frame["date"] = pd.to_datetime(frame["date"], errors="raise").dt.date
+        route_values = pd.to_numeric(frame["route"], errors="raise")
+        hour_values = pd.to_numeric(frame["hour"], errors="raise")
+        if (route_values % 1 != 0).any() or (hour_values % 1 != 0).any():
+            raise ValueError(f"{label} labels contain fractional route numbers or hours")
+        frame["route"] = route_values.astype(int)
+        frame["hour"] = hour_values.astype(int)
+        frame["boardings"] = pd.to_numeric(frame["boardings"], errors="raise")
+        if frame.duplicated(["route", "date", "hour"]).any():
+            raise ValueError(f"{label} labels contain duplicate route/date/hour keys")
+        if not frame["route"].isin(ROUTE_NUMBERS).all():
+            raise ValueError(f"{label} labels contain routes outside the official route list")
+        if (
+            not frame["hour"].between(0, 23).all()
+            or frame["boardings"].isna().any()
+            or not frame["boardings"].map(math.isfinite).all()
+            or (frame["boardings"] < 0).any()
+        ):
+            raise ValueError(f"{label} labels contain invalid hours or negative boardings")
+
+    labels = pd.concat([train, validation], ignore_index=True)
+    if labels.empty or labels["date"].min() < DATA_START or labels["date"].max() >= DATA_END:
+        raise ValueError("Label dates must fall within 2025-01-01 through 2025-10-31")
+    if train["date"].max() >= date(2025, 9, 1) or validation["date"].min() < date(2025, 9, 1):
+        raise ValueError("Training and validation labels do not match the documented 2025 split")
+
+    sample = pd.read_csv(sample_path, sep=";")
+    if not {"route", "date", "hour", "prediction"} <= set(sample.columns):
+        raise ValueError("test_submission.csv has an unexpected schema")
+
+    label_hash = file_digest(labels_paths)
+    network_hash = file_digest(static_paths)[:12]
+    dataset_hash = hashlib.sha256(f"{label_hash}:{network_hash}".encode()).hexdigest()[:12]
+    dataset_id = f"competition-2025-{dataset_hash}"
+    network_id = f"moscow-tram-{network_hash}"
+    network, geometries, network_warnings = build_network(project_root, network_id)
+
+    history_start = datetime.combine(DATA_START, time.min, MOSCOW)
+    history_end = datetime.combine(DATA_END, time.min, MOSCOW)
+    as_of_start = history_start + timedelta(days=28)
+    all_buckets = (DATA_END - DATA_START).days * 24 * len(ROUTE_NUMBERS)
+    counts_by_route = labels.groupby("route").size().to_dict()
+    coverage_ratio = len(labels) / all_buckets
+    latest_event = max(
+        datetime.combine(row.date, time(hour=int(row.hour)), MOSCOW) + timedelta(hours=1)
+        for row in labels.itertuples(index=False)
+    )
+    limitations = [
+        "История содержит почасовые агрегаты из labels_day_train.csv и labels_day_test.csv.",
+        "Интервалы без исходной строки сохранены как пропуски; обучающий конвейер модели трактует отсутствующие метки как нулевые оплаты.",
+        "Справочник не содержит остановок маршрута №5.",
+    ]
     manifest = {
         "capabilities": {
-            "dataset_revision_id": "competition-data-v1",
-            "network_revision_id": "competition-network-v1",
+            "dataset_revision_id": dataset_id,
+            "network_revision_id": network_id,
             "source_mode": "batch",
             "timezone": "Europe/Moscow",
             "observation_profiles": [
                 {
-                    "id": profile_id,
+                    "id": PROFILE_ID,
                     "metric": "boardings",
                     "unit": "passengers",
                     "spatial_level": "route",
-                    "resolution": "day",
-                    "route_ids": route_ids,
-                    "history_start": start_dt.isoformat(),
-                    "history_end": end_dt.isoformat(),
+                    "resolution": "hour",
+                    "route_ids": [str(number) for number in ROUTE_NUMBERS],
+                    "history_start": history_start.isoformat(),
+                    "history_end": history_end.isoformat(),
                     "aggregation_method": "sum",
-                    "limitations": [
-                        "Official Moscow Tram Competition dataset (train + test splits)"
-                    ]
+                    "limitations": limitations,
                 }
             ],
             "forecast_profiles": [
                 {
-                    "id": forecast_profile_id,
+                    "id": "competition-forecast-route-day",
                     "metric": "boardings",
                     "unit": "passengers",
                     "spatial_level": "route",
-                    "resolution": "day",
-                    "route_ids": route_ids,
+                    "resolution": "hour",
+                    "route_ids": [str(number) for number in ROUTE_NUMBERS],
                     "aggregation_method": "sum",
-                    "observation_profile_id": profile_id,
-                    "horizon": "month",
+                    "observation_profile_id": PROFILE_ID,
+                    "horizon": "day",
                     "availability": "available",
                     "unavailable_reason": None,
-                    "allowed_as_of_start": "2025-10-31T00:00:00+03:00",
-                    "allowed_as_of_end": "2025-10-31T00:00:00+03:00",
-                    "forecast_start_min": "2025-11-01T00:00:00+03:00",
-                    "forecast_start_max": "2025-11-01T00:00:00+03:00",
+                    "allowed_as_of_start": as_of_start.isoformat(),
+                    "allowed_as_of_end": history_end.isoformat(),
+                    "forecast_start_min": history_end.isoformat(),
+                    "forecast_start_max": history_end.isoformat(),
                     "start_alignment": "local_midnight",
                     "evaluation_status": "pending",
                     "prediction_interval_available": False,
                     "limitations": [
-                        "CatBoost inference & seasonal benchmark"
-                    ]
+                        "Для API доступен почасовой прогноз на одни сутки.",
+                        "Прогноз на ноябрь и декабрь для конкурсной отправки строится отдельной командой обучения.",
+                    ],
                 }
             ],
             "max_page_size": 1000,
             "max_routes_per_run": 100,
-            "warnings": []
+            "warnings": network_warnings,
         },
-        "network": {
-            "id": "competition-network-v1",
-            "routes": network_routes
-        },
+        "network": network,
         "sources": [
             {
                 "source": "validations",
                 "source_mode": "batch",
-                "event_watermark": "2025-10-31T23:59:59+03:00",
-                "ingested_at": "2025-10-31T23:59:59+03:00",
-                "freshness": "fresh",
+                "event_watermark": latest_event.isoformat(),
+                "ingested_at": datetime.now(MOSCOW).isoformat(),
+                "freshness": "unknown",
                 "stale_after_seconds": None,
                 "quality": {
-                    "status": "unverified",
-                    "coverage_ratio": None,
-                    "flags": [
-                        "competition_dataset"
-                    ]
-                }
+                    "status": "partial" if coverage_ratio < 1 else "ok",
+                    "coverage_ratio": coverage_ratio,
+                    "flags": ["competition_labels", "missing_buckets_preserved"],
+                },
             }
         ],
         "models": [
             {
-                "profile_ids": [forecast_profile_id],
+                "profile_ids": ["competition-forecast-route-day"],
                 "model": {
-                    "id": "seasonal-baseline-day",
+                    "id": "seasonal-baseline-competition",
                     "version": "1",
                     "method": "seasonal_naive_v1",
                     "is_baseline": True,
                     "feature_set_version": "calendar_v1",
-                    "training_history_end": "2025-10-31T00:00:00+03:00"
-                }
+                    "training_history_end": history_end.isoformat(),
+                },
             }
         ],
         "series": [
             {
-                "profile_id": profile_id,
+                "profile_id": PROFILE_ID,
                 "spatial": {
                     "level": "route",
-                    "route_id": r_id,
+                    "route_id": str(number),
                     "direction_id": None,
                     "stop_id": None,
                     "stop_sequence": None,
-                    "segment_id": None
+                    "segment_id": None,
                 },
-                "geometry": None,
-                "coverage_start": start_dt.isoformat(),
-                "coverage_end": end_dt.isoformat()
+                "geometry": geometries.get(str(number)),
+                "coverage_start": history_start.isoformat(),
+                "coverage_end": history_end.isoformat(),
             }
-            for r_id in route_ids
-        ]
+            for number in ROUTE_NUMBERS
+        ],
     }
 
-    # 2. Load observations from labels_day_train.csv and labels_day_test.csv
-    df_train = pd.read_csv('data/labels/labels_day_train.csv', sep=';')
-    df_test = pd.read_csv('data/labels/labels_day_test.csv', sep=';')
-    df_all = pd.concat([df_train, df_test], ignore_index=True)
-
-    # Group by route and date, sum boardings
-    df_daily = df_all.groupby(['route', 'date'])['boardings'].sum().reset_index()
-    daily_map = {}
-    for _, row in df_daily.iterrows():
-        daily_map[(int(row['route']), str(row['date']))] = float(row['boardings'])
-
-    # Write observations.jsonl
-    # Grid of dates from 2025-01-01 to 2025-10-31 (every day must be strictly sequential!)
-    current = start_dt
-    days_list = []
-    while current < end_dt:
-        nxt = current + timedelta(days=1)
-        days_list.append((current, nxt, current.strftime("%Y-%m-%d")))
-        current = nxt
-
-    now_iso = datetime.now(MOSCOW).isoformat()
-
-    obs_count = 0
-    with open(output_dir / "observations.jsonl", "w", encoding="utf-8") as f_out:
-        for num in route_nums:
-            r_id = f"hackathon-{num}"
-            for c_start, c_end, d_str in days_list:
-                # Value for route
-                val = daily_map.get((num, d_str), 0.0)
-                available_at = (c_end + timedelta(hours=3)).isoformat()
-                if parse_time_obj(available_at) > datetime.now(MOSCOW):
-                    available_at = now_iso
-
-                record = {
-                    "profile_id": profile_id,
-                    "available_at": available_at,
-                    "point": {
-                        "spatial": {
-                            "level": "route",
-                            "route_id": r_id,
-                            "direction_id": None,
-                            "stop_id": None,
-                            "stop_sequence": None,
-                            "segment_id": None
+    output_dir.mkdir(parents=True, exist_ok=True)
+    record_count = 0
+    observed = {
+        (int(row.route), row.date, int(row.hour)): float(row.boardings)
+        for row in labels.itertuples(index=False)
+    }
+    with (output_dir / "observations.jsonl").open("w", encoding="utf-8") as stream:
+        current_date = DATA_START
+        while current_date < DATA_END:
+            for hour in range(24):
+                interval_start = datetime.combine(current_date, time(hour), MOSCOW)
+                interval_end = interval_start + timedelta(hours=1)
+                for number in ROUTE_NUMBERS:
+                    value = observed.get((number, current_date, hour))
+                    missing = value is None
+                    record = {
+                        "profile_id": PROFILE_ID,
+                        "available_at": interval_end.isoformat(),
+                        "point": {
+                            "spatial": {
+                                "level": "route",
+                                "route_id": str(number),
+                                "direction_id": None,
+                                "stop_id": None,
+                                "stop_sequence": None,
+                                "segment_id": None,
+                            },
+                            "interval_start": interval_start.isoformat(),
+                            "interval_end": interval_end.isoformat(),
+                            "value": value,
+                            "value_kind": "observed",
+                            "estimation_method": None,
+                            "missing_reason": "not_present_in_source" if missing else None,
+                            "quality": {
+                                "status": "missing" if missing else "ok",
+                                "coverage_ratio": 0.0 if missing else 1.0,
+                                "flags": ["missing_source_bucket"] if missing else [],
+                            },
                         },
-                        "interval_start": c_start.isoformat(),
-                        "interval_end": c_end.isoformat(),
-                        "value": val,
-                        "value_kind": "observed",
-                        "estimation_method": None,
-                        "missing_reason": None,
-                        "quality": {
-                            "status": "ok",
-                            "coverage_ratio": 1.0,
-                            "flags": []
-                        }
                     }
-                }
-                f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
-                obs_count += 1
+                    stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    record_count += 1
+            current_date += timedelta(days=1)
 
-    # Save manifest.json
-    with open(output_dir / "manifest.json", "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    (output_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Bundle: {output_dir}")
+    print(f"Dataset revision: {dataset_id}")
+    print(f"Network revision: {network_id}")
+    print(f"Routes: {len(ROUTE_NUMBERS)}; hourly buckets: {record_count:,}")
+    missing_route_five = all_buckets // len(ROUTE_NUMBERS) - counts_by_route.get(5, 0)
+    print(f"Source coverage: {coverage_ratio:.2%}; missing route-5 buckets: {missing_route_five:,}")
+    return dataset_id, record_count
 
-    print(f"Successfully generated {output_dir}:")
-    print(f" - Routes: {len(route_nums)}")
-    print(f" - Observations: {obs_count}")
-    print(f" - Date range: 2025-01-01 to 2025-10-31 ({len(days_list)} days)")
 
-def parse_time_obj(s: str) -> datetime:
-    return datetime.fromisoformat(s)
+def main() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", type=Path, default=project_root / "dataset")
+    parser.add_argument("--output-dir", type=Path, default=project_root / "data/competition_bundle")
+    parser.add_argument("--project-root", type=Path, default=project_root)
+    args = parser.parse_args()
+    build_bundle(args.data_dir, args.output_dir, args.project_root)
+
 
 if __name__ == "__main__":
-    out = Path("data/competition_bundle")
-    build_bundle(out)
+    main()

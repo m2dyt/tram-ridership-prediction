@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import Chart from "../components/Chart";
-import { useObservations, useDataStatus } from "../api/hooks";
+import { useObservations, useDataStatus, useHealth } from "../api/hooks";
 
 export default function DashboardPage({ caps, route }) {
   // Find a valid observation profile for the current route
@@ -40,11 +40,12 @@ export default function DashboardPage({ caps, route }) {
 
   const dashboardPoints = useMemo(() => {
     if (!observationsQuery.data) return [];
-    // The API might return different levels (stop, segment, route). We can just take the first series or aggregate.
-    return observationsQuery.data.filter(p => p.value != null);
-  }, [observationsQuery.data]);
+    return observationsQuery.data.filter(p => p.spatial?.route_id === route?.route?.id);
+  }, [observationsQuery.data, route?.route?.id]);
 
   const dataStatusQuery = useDataStatus();
+  const healthQuery = useHealth();
+  const validationSource = dataStatusQuery.data?.sources?.find(source => source.source === "validations");
 
   return (
     <>
@@ -62,7 +63,13 @@ export default function DashboardPage({ caps, route }) {
         <div className="stat-grid">
             <div className="stat stat-pattern">
                 <span>Используемая модель</span>
-                <strong className="word-stat">{caps?.capabilities?.some_model_name || "Трамвай ПРОГНОЗ v1"}</strong>
+                <strong className="word-stat">
+                  {healthQuery.data?.model === "ok" && healthQuery.data?.model_version
+                    ? `ML · ${healthQuery.data.model_version}`
+                    : healthQuery.data?.model === "fallback"
+                      ? "Сезонный резерв"
+                      : "Нет активной модели"}
+                </strong>
             </div>
             <div className="stat stat-pattern">
                 <span>Ревизия сети</span>
@@ -70,11 +77,11 @@ export default function DashboardPage({ caps, route }) {
             </div>
             <div className="stat stat-pattern">
                 <span>Режим данных</span>
-                <strong className="word-stat">{caps?.source_mode || "Реальный"}</strong>
+                <strong className="word-stat">{caps?.source_mode || "Нет данных"}</strong>
             </div>
             <div className="stat stat-pattern">
                 <span>Прогнозируемых маршрутов</span>
-                <strong className="word-stat">{profile?.route_ids?.length || 10}</strong>
+                <strong className="word-stat">{profile?.route_ids?.length ?? "—"}</strong>
             </div>
         </div>
 
@@ -83,24 +90,25 @@ export default function DashboardPage({ caps, route }) {
            <h3 style={{ marginTop: 0 }}>Качество и покрытие данных</h3>
            <div className="stat-grid" style={{ marginTop: '1rem' }}>
              <div className="stat">
-                 <span>Статус пайплайна</span>
-                 <strong className="word-stat" style={{ color: dataStatusQuery.data.status === 'ok' ? 'var(--success)' : 'var(--error)' }}>
-                   {dataStatusQuery.data.status === 'ok' ? 'В норме' : 'Ошибка'}
+                 <span>Качество источника</span>
+                 <strong className="word-stat">
+                   {validationSource?.quality?.status || "Нет данных"}
                  </strong>
              </div>
              <div className="stat">
-                 <span>Пропуски данных (Gaps)</span>
-                 <strong>{dataStatusQuery.data.gaps_count || 0}</strong>
-             </div>
-             <div className="stat">
                  <span>Покрытие</span>
-                 <strong>{dataStatusQuery.data.coverage_percent != null ? dataStatusQuery.data.coverage_percent + '%' : '100%'}</strong>
+                 <strong>{validationSource?.quality?.coverage_ratio != null
+                   ? `${(validationSource.quality.coverage_ratio * 100).toFixed(1)}%`
+                   : "Нет данных"}</strong>
              </div>
              <div className="stat">
-                 <span>Последнее обновление</span>
-                 <strong className="word-stat">{new Date(dataStatusQuery.data.last_updated || Date.now()).toLocaleTimeString()}</strong>
+                 <span>Последняя проверка API</span>
+                 <strong className="word-stat">{new Date(dataStatusQuery.data.checked_at).toLocaleString("ru-RU")}</strong>
              </div>
            </div>
+           {(dataStatusQuery.data.warnings || []).length > 0 && (
+             <ul>{dataStatusQuery.data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+           )}
          </div>
        )}
 

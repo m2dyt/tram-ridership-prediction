@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -105,6 +107,10 @@ def train_and_evaluate(
 
     # Optional model bundle export
     if export_bundle_version:
+        training_end_day = pd.to_datetime(grid_train["date"]).max().date() + timedelta(days=1)
+        training_history_end = datetime.combine(
+            training_end_day, time.min, ZoneInfo("Europe/Moscow")
+        ).isoformat()
         export_model_bundle(
             version=export_bundle_version,
             models=val_models,
@@ -118,6 +124,8 @@ def train_and_evaluate(
                 "use_residual": use_residual,
                 "per_route": per_route,
                 "use_weather": use_weather,
+                "training_history_end": training_history_end,
+                "routes": sorted(int(route) for route in grid_train["route"].unique()),
             },
             models_root=models_root,
             overwrite=overwrite,

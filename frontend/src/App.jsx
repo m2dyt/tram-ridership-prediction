@@ -100,9 +100,11 @@ function LoginPage() {
         <div className="login-form-side">
           <div className="login-form-header">
             <p className="eyebrow">СЛУЖЕБНЫЙ ДОСТУП К ДАННЫМ</p>
-            <h2>{isRegistering ? "Регистрация оператора" : "Вход в систему"}</h2>
+            <h2>{isRegistering ? "Создание учётной записи" : "Вход в систему"}</h2>
             <p className="login-lead-text">
-              Введите служебные учётные данные для доступа к моделям и аналитике.
+              {isRegistering
+                ? "Новая учётная запись получает роль просмотра. Локальный оператор создаётся при первом запуске Docker."
+                : "Для локального входа используйте tram-admin и пароль TRAM_BOOTSTRAP_OPERATOR_PASSWORD из .env."}
             </p>
           </div>
 
@@ -130,7 +132,7 @@ function LoginPage() {
             {loginMutation.isError && <div className="notice error">Ошибка входа: {loginMutation.error.message}</div>}
             {registerMutation.isError && <div className="notice error">Ошибка регистрации: {registerMutation.error.message}</div>}
             <button type="submit" className="mgt-submit-btn" disabled={loginMutation.isPending || registerMutation.isPending}>
-              {isRegistering ? "Зарегистрироваться" : "Войти в систему"} →
+                {isRegistering ? "Создать учётную запись" : "Войти в систему"} →
             </button>
             <div className="login-sub-actions">
               <a href="#" onClick={(e) => { e.preventDefault(); setIsRegistering(!isRegistering); }}>
@@ -226,13 +228,7 @@ function Workspace() {
 
   const routesQuery = useRoutes(network, validAt);
   const routes = { data: routesQuery.data, loading: routesQuery.isLoading, error: routesQuery.error };
-  const rawRoutes = (routes.data && routes.data.length > 0)
-    ? routes.data
-    : [1, 5, 7, 11, 12, 17, 25, 26, 28, 50].map(num => ({
-        id: `hackathon-${num}`,
-        number: `${num}`,
-        name: `Трамвай № ${num} (Москва)`
-      }));
+  const rawRoutes = routes.data || [];
 
   const allRoutes = useMemo(() => {
     return [...rawRoutes].sort((a, b) => {
@@ -259,7 +255,7 @@ function Workspace() {
   if (!caps.data || !route.data)
     return (
       <Empty>
-        Нет опубликованной маршрутной сети. Подготовьте и опубликуйте набор данных.
+        API не вернул опубликованные маршруты. Запустите импорт реального набора данных.
       </Empty>
     );
 

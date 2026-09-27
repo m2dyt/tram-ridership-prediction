@@ -11,7 +11,8 @@ import {
   useForecastRun, 
   useCreateForecastRun, 
   useForecastPoints, 
-  useForecastMap 
+  useForecastMap,
+  useHealth,
 } from "../api/hooks";
 import Chart from "../components/Chart.jsx";
 import Map from "../components/Map.jsx";
@@ -27,6 +28,7 @@ import {
 } from "../domain/format.js";
 
 export default function Forecast({ caps, route }) {
+  const healthQuery = useHealth();
   const profiles = caps.forecast_profiles.filter((p) =>
     p.route_ids.includes(route.route.id),
   );
@@ -91,10 +93,14 @@ export default function Forecast({ caps, route }) {
       <section className="panel controls">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">РАСЧЁТ БЕЗ ОБУЧЕНИЯ</p>
+            <p className="eyebrow">ПРОГНОЗ ЧЕРЕЗ API И WORKER</p>
             <h2>Прогноз пассажиропотока</h2>
           </div>
-          <Badge>Сезонная база</Badge>
+          <Badge>
+            {healthQuery.data?.model === "ok" && healthQuery.data?.model_version
+              ? `ML · ${healthQuery.data.model_version}`
+              : "Сезонная базовая модель"}
+          </Badge>
         </div>
         <form className="form-grid" onSubmit={create}>
           <label>

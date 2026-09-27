@@ -10,11 +10,17 @@
 !ml/
 !ml/src/
 !ml/src/**
+!ml/training/
+!ml/training/**
+!scripts/
+!scripts/**
 !frontend/
 !frontend/package.json
 !frontend/package-lock.json
 !frontend/index.html
 !frontend/vite.config.js
+!frontend/public/
+!frontend/public/**
 !frontend/src/
 !frontend/src/**
 **/__pycache__
