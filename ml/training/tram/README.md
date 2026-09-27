@@ -2,15 +2,21 @@
 
 Декомпозированная модульная архитектура пайплайна прогнозирования пассажиропотока трамвайных маршрутов Москвы.
 
-## Файлы
+1. Код обучения, валидации и экспорта:
+- Пайплайн обучения: ml/training/tram/ (features.py, baseline.py, models.py, evaluation.py, bundle.py, cli.py)
+- Единый CLI запуска: ml/training/train_tram.py
+- Артефакты и бандлы моделей: models/tram/ (веса, профили, schema признаков, SHA-256 манифест)
+- Готовые предсказания: ml/predictions/submission.csv и кандидаты в ml/predictions/candidates/
 
-| Файл | Назначение |
-|---|---|
-| [__init__.py](__init__.py) | Экспорт основных интерфейсов и функций пакета. |
-| [baseline.py](baseline.py) | Расчёт исторических профилей (route x day_type x hour), сезонный бейзлайн без утечек данных. |
-| [bundle.py](bundle.py) | Неизменяемые бандлы моделей (`TramModelBundle`): сохранение, валидация контрольных сумм SHA-256, загрузка и батч-инференс. |
-| [cli.py](cli.py) | Консольный интерфейс (CLI) для запуска обучения, оценки, экспорта бандлов и генерации сабмитов. |
-| [evaluation.py](evaluation.py) | Расчёт метрик WAPE и официального WAPE-score (с защитой от деления на ноль), детализация по маршрутам и часам. |
-| [features.py](features.py) | Генерация декартовой сетки (route x date x hour), календарные признаки (день недели, предпраздничные дни), присоединение погодных факторов. |
-| [models.py](models.py) | Обучение моделей на остатках (Residual Learning): CatBoostRegressor, HistGradientBoostingRegressor, RidgeRegressor. |
-| [submission.py](submission.py) | Форматирование конкурсных предсказаний (зануление маршрута 5, разделитель `;`, сохранение в `candidates/`). |
+2. Инструкция запуска обучения и инференса:
+# Локальное окружение
+pip install -r requirements.txt -e .
+
+# Обучение модели с автоматическим экспортом бандла и генерацией submission.csv:
+python -m ml.training.tram.cli --model catboost --iterations 2000 --export-bundle catboost-v1 --set-active
+
+# Только быстрая валидация (Sep-Oct 2025 hold-out):
+python -m ml.training.tram.cli --model catboost --eval-only
+
+# Валидация файла предсказаний по формату организаторов:
+python scripts/validate_submission.py ml/predictions/submission.csv
