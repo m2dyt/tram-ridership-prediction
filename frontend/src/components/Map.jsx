@@ -1,10 +1,23 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import MapLibreMap, { Source, Layer } from "@vis.gl/react-maplibre";
-import { number } from "../domain/format.js";
+import {
+  CARTO_MAP_STYLE,
+  FALLBACK_MAP_STYLE,
+  shouldFallbackToLocalMapStyle,
+} from "../domain/mapStyle.js";
 
 const EMPTY_CONTEXT = [];
 
 export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
+  const [mapStyle, setMapStyle] = useState(CARTO_MAP_STYLE);
+  const [usesFallbackStyle, setUsesFallbackStyle] = useState(false);
+
+  const handleMapError = (event) => {
+    if (usesFallbackStyle || !shouldFallbackToLocalMapStyle(event)) return;
+    setMapStyle(FALLBACK_MAP_STYLE);
+    setUsesFallbackStyle(true);
+  };
+
   // Конвертируем маршруты в GeoJSON для отрисовки линий
   const routeFeatures = useMemo(() => {
     const features = [];
@@ -43,7 +56,8 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
           latitude: 55.757,
           zoom: 11,
         }}
-        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        mapStyle={mapStyle}
+        onError={handleMapError}
         interactive={true}
       >
         {/* Линии маршрута */}
@@ -89,6 +103,27 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
           </Source>
         )}
       </MapLibreMap>
+
+      {usesFallbackStyle && (
+        <div
+          role="status"
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 2,
+            padding: "6px 10px",
+            borderRadius: "8px",
+            background: "#ffffff",
+            color: "#334155",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+            fontSize: "12px",
+          }}
+        >
+          Подложка недоступна: маршрут показан без неё
+        </div>
+      )}
 
       <div className="map-key" style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", padding: "5px", borderRadius: "5px" }}>
         <i style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#0076bc", marginRight: "5px" }} /> Маршрут 
