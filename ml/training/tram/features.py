@@ -99,7 +99,23 @@ BASE_FEATURE_COLS: list[str] = [
     "hist_mean_route",
 ]
 
-FEATURE_COLS: list[str] = BASE_FEATURE_COLS + WEATHER_FEATURE_COLS
+ROUTE_STATIC_FEATURE_COLS: list[str] = [
+    "route_is_active",
+    "route_num_stops",
+    "route_length_km",
+    "route_metro_stops",
+    "route_metro_ratio",
+    "route_center_dist_km",
+    "route_mean_delay_min",
+    "route_late_ratio",
+    "route_punctuality_ratio",
+    "route_delay_std",
+    "route_fleet_proxy",
+    "route_segregated_ratio",
+    "route_shared_stops",
+]
+
+FEATURE_COLS: list[str] = BASE_FEATURE_COLS + WEATHER_FEATURE_COLS + ROUTE_STATIC_FEATURE_COLS
 
 CATEGORICAL_FEATURES: list[str] = ["route", "hour", "dow_effective"]
 ROUTE_FEATURE_COLS: list[str] = [c for c in FEATURE_COLS if c != "route"]
@@ -213,10 +229,52 @@ def attach_weather_features(
     return df
 
 
+def attach_route_features(
+    df: pd.DataFrame,
+    route_features_df: pd.DataFrame | None = None,
+    route_features_path: Path | None = None,
+) -> pd.DataFrame:
+    """Attach static spatial and operational telemetry features to route grid."""
+    df = df.copy()
+
+    if route_features_df is None:
+        if route_features_path is None:
+            candidate_paths = [
+                Path("data/tram_route_features.csv"),
+                Path("../data/tram_route_features.csv"),
+                Path("../../data/tram_route_features.csv"),
+            ]
+            for p in candidate_paths:
+                if p.is_file():
+                    route_features_path = p
+                    break
+
+        if route_features_path and route_features_path.is_file():
+            route_features_df = pd.read_csv(route_features_path)
+
+    if route_features_df is not None:
+        join_cols = ["route"] + [
+            c for c in ROUTE_STATIC_FEATURE_COLS if c in route_features_df.columns
+        ]
+        rf_sub = route_features_df[join_cols].drop_duplicates(subset=["route"])
+        df = df.merge(rf_sub, on="route", how="left")
+
+    # Fill defaults for any missing static columns
+    for col in ROUTE_STATIC_FEATURE_COLS:
+        if col not in df.columns:
+            df[col] = 0.0
+        else:
+            df[col] = df[col].fillna(0.0)
+
+    return df
+
+
 def build_feature_matrix(
     data_dir: Path,
     use_weather: bool = True,
     weather_path: Path | None = None,
+    use_route_features: bool = True,
+    route_features_path: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load raw labels, generate full grids with missing zeros, and split into train, val, and submission test."""
     train_lbl_path = data_dir / "labels" / "labels_day_train.csv"
@@ -258,5 +316,13 @@ def build_feature_matrix(
         grid_train = attach_weather_features(grid_train, weather_path=w_path)
         grid_val = attach_weather_features(grid_val, weather_path=w_path)
         grid_sub = attach_weather_features(grid_sub, weather_path=w_path)
+
+    # Add route spatial & operational telemetry features if enabled
+    if use_route_features:
+        print("Attaching route spatial & operational telemetry features...")
+        rf_path = route_features_path or Path("data/tram_route_features.csv")
+        grid_train = attach_route_features(grid_train, route_features_path=rf_path)
+        grid_val = attach_route_features(grid_val, route_features_path=rf_path)
+        grid_sub = attach_route_features(grid_sub, route_features_path=rf_path)
 
     return grid_train, grid_val, grid_sub
