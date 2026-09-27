@@ -66,6 +66,17 @@ class Predictor(Protocol):
     ) -> tuple[Prediction, ...]: ...
 
 
+class ModelCatalog(Protocol):
+    def active_bundle(self) -> Document:
+        """Describe the configured model bundle without deserializing it.
+
+        Returns {"status": "not_configured" | "ok" | "invalid", "version",
+        "reason", "model" (ModelReference or None), "routes" (route IDs the
+        bundle can forecast)}.
+        """
+        ...
+
+
 class UserRepository(Protocol):
     def get_by_username(self, username: str) -> Document | None: ...
     def get_by_id(self, user_id: str) -> Document | None: ...

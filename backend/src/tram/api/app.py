@@ -48,6 +48,7 @@ def create_http_app(
     extra_reads=None,
     extra_commands=None,
     auth_service=None,
+    model_status=None,
 ):
     app = FastAPI(title=contract.document["info"]["title"], lifespan=lifespan)
     app.openapi = lambda: contract.document
@@ -199,14 +200,22 @@ def create_http_app(
 
     def health():
         healthy = reads.repository.healthy()
+        model = (
+            model_status()
+            if model_status
+            else {"model": "not_configured", "model_version": None, "ready": True}
+        )
+        ready = healthy and model["ready"]
         return JSONResponse(
             {
-                "status": "ready" if healthy else "unavailable",
+                "status": "ready" if ready else "unavailable",
                 "checked_at": reads.clock.now().isoformat(),
                 "api_version": "v1",
                 "database": "up" if healthy else "down",
+                "model": model["model"],
+                "model_version": model["model_version"],
             },
-            status_code=200 if healthy else 503,
+            status_code=200 if ready else 503,
         )
 
     handlers = {

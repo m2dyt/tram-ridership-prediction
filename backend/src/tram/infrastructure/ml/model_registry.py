@@ -146,4 +146,30 @@ def read_model_metadata(bundle_dir: Path) -> dict:
     if not card.strip():
         raise InvalidModelBundle("invalid model-card.md")
 
-    return {"config": config, "metrics": metrics, "card": card}
+    return {"config": config, "metrics": metrics, "card": card, "checksums": checksums}
+
+
+def read_active_pointer(models_root: Path) -> tuple[str | None, str | None]:
+    """Return (active version, error) from models_root/active_version.txt.
+
+    (None, None) means no pointer exists: no bundle is configured.
+    """
+    path = models_root / "active_version.txt"
+    if path.is_symlink():
+        return None, "unsafe active_version.txt"
+    if not path.exists():
+        return None, None
+    try:
+        with path.open("rb") as stream:
+            content = stream.read(257)
+    except OSError:
+        return None, "unreadable active_version.txt"
+    if len(content) > 256:
+        return None, "invalid active_version.txt"
+    try:
+        version = content.decode("utf-8").strip()
+    except UnicodeError:
+        return None, "invalid active_version.txt"
+    if not valid_version(version):
+        return None, "invalid active_version.txt"
+    return version, None
