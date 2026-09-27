@@ -1303,11 +1303,20 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: false
+                required: [access_token, token_type, expires_in, role, user]
                 properties:
                   access_token: {type: string}
                   token_type: {type: string}
                   expires_in: {type: integer}
                   role: {type: string}
+                  user:
+                    type: object
+                    additionalProperties: false
+                    required: [id, username]
+                    properties:
+                      id: {type: string}
+                      username: {type: string}
         '401':
           $ref: '#/components/responses/Unauthorized'
   /auth/logout:
