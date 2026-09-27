@@ -171,4 +171,15 @@ python scripts/benchmark_inference.py --iterations 10
 - 168 часов (1 неделя, 4 маршрута);
 - 1464 часа (2 месяца, все 10 маршрутов конкурса).
 
-Результаты сохраняются в машиночитаемом формате в `benchmarks/latest.json`.
+Результаты сохраняются в машиночитаемом формате в `benchmarks/latest.json` (ключ `scenarios`). Это прямые вызовы предиктора в процессе — без HTTP, очереди и PostgreSQL.
+
+## Бенчмарк полного серверного пути (API → worker → PostgreSQL)
+
+```powershell
+python -m pip install -e ".[benchmark]"  # psutil, если ещё не установлен
+python -m tram.cli migrate
+python -m tram.cli publish demo-bundle   # или другой опубликованный набор
+python scripts/benchmark_api.py --iterations 15
+```
+
+Поднимает настоящие `uvicorn` (`tram.composition:create_app`) и `tram worker` отдельными процессами против БД из `TRAM_DATABASE_URL`, затем шлёт `N` независимых `POST /forecast-runs` с уникальным `Idempotency-Key`, ждёт `succeeded` реальным поллингом `GET .../{run_id}` и читает `GET .../points`. Пишет отдельно задержку самого `POST` (`submit_latency_ms`), полный путь до готовности (`end_to_end_ms` — включает настоящий `TRAM_POLL_SECONDS` воркера, по умолчанию 2 с, это не оверхед расчёта), задержку чтения точек, RPS по завершённым round trip'ам, ошибки и RSS API/worker-процессов до и после нагрузки. Результат сохраняется в тот же `benchmarks/latest.json` под ключом `server_scenario`, не затирая `scenarios`. Требует достижимый и мигрированный `TRAM_DATABASE_URL`, статический `TRAM_OPERATOR_TOKEN` в `.env` (или включённый `allow_static_tokens`) и опубликованный набор с профилем `availability: available`.

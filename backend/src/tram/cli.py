@@ -98,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             "TRAM_VIEWER_TOKEN": secrets.token_urlsafe(32),
             "TRAM_OPERATOR_TOKEN": secrets.token_urlsafe(32),
             "TRAM_CURSOR_SECRET": secrets.token_urlsafe(32),
+            "TRAM_AUTH_TOKEN_SECRET": secrets.token_urlsafe(32),
         }
         try:
             with Path(".env").open("x", encoding="utf-8", newline="\n") as stream:
