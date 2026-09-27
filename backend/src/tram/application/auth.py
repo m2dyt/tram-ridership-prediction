@@ -86,7 +86,7 @@ class AuthService:
         self.sessions.create_session(user["id"], refresh_hash, now, expires_at)
         return access_token, access_exp, refresh_token, user
 
-    def refresh(self, refresh_token: str) -> tuple[str, datetime, str]:
+    def refresh(self, refresh_token: str) -> tuple[str, datetime, str, dict]:
         now = self.clock.now()
         old_hash = self._hash_token(refresh_token)
 
@@ -105,7 +105,10 @@ class AuthService:
         access_token, access_exp = self.issuer.issue_access_token(
             user["id"], user["role"], now, self.access_ttl
         )
-        return access_token, access_exp, new_refresh_token
+        # Mirrors login(): the caller already re-read the user row above, so the
+        # role/identity returned here is guaranteed to match the freshly issued
+        # access token, not a stale value cached by the client.
+        return access_token, access_exp, new_refresh_token, user
 
     def logout(self, refresh_token: str | None, everywhere: bool = False) -> None:
         if not refresh_token:

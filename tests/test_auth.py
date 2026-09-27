@@ -158,15 +158,31 @@ def test_login_inactive_user(auth_service):
 
 
 def test_refresh_success(auth_service):
-    _, _, refresh_token, _ = auth_service.login("admin", "secret", "192.0.2.1")
+    _, _, refresh_token, login_user = auth_service.login("admin", "secret", "192.0.2.1")
 
-    acc, exp, new_refresh = auth_service.refresh(refresh_token)
+    acc, exp, new_refresh, user = auth_service.refresh(refresh_token)
     assert acc == "access_token_for_u1"
     assert new_refresh != refresh_token
+    # The response must carry the same identity/role as login, not just a bare
+    # token: a client refreshing its session still needs to know who it is.
+    assert user["id"] == login_user["id"] == "u1"
+    assert user["role"] == login_user["role"]
+    assert user["username"] == login_user["username"]
 
     # Old token shouldn't work anymore
     with pytest.raises(ApplicationError):
         auth_service.refresh(refresh_token)
+
+
+def test_refresh_reflects_current_role_not_login_time_role(auth_service):
+    """If a user is promoted between login and refresh, refresh must report the new role."""
+    _, _, refresh_token, login_user = auth_service.login("admin", "secret", "192.0.2.1")
+    assert login_user["role"] == "operator"
+
+    auth_service.users._users["u1"]["role"] = "viewer"
+
+    _, _, _, user = auth_service.refresh(refresh_token)
+    assert user["role"] == "viewer"
 
 
 def test_logout(auth_service):
