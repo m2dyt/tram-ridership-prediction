@@ -518,9 +518,16 @@ def test_jwt_authorization_flow(api):
     assert response.json()["username"] == "testuser"
     assert set(response.json()) == {"id", "username", "role"}
 
-    # 6. Refresh the token
-    response = client.post("/api/v1/auth/refresh", cookies={"tram_refresh": refresh_token})
-    assert response.status_code == 200
+    # 6. Refresh the token. Validated against the OpenAPI schema (checked() does this),
+    # which requires role/user in the body: a client refreshing its session still
+    # needs to know who it is, not just get a bare token back.
+    response = checked(
+        api, "POST", "/auth/refresh", role=None, cookies={"tram_refresh": refresh_token}
+    )
+    refreshed = response.json()
+    assert refreshed["role"] == data["role"]
+    assert refreshed["user"] == data["user"]
+    assert "password_hash" not in refreshed and "password_hash" not in refreshed.get("user", {})
 
     # 7. Logout
     new_refresh = response.cookies.get("tram_refresh", refresh_token)
