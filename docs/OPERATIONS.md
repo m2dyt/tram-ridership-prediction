@@ -20,6 +20,14 @@ python -m tram.cli replay-trip data/demo-complete/trip-plan.json data/demo-compl
 
 БД хранит HMAC пары логин + IP, число попыток и начало окна. API удаляет истёкшие записи при следующем входе. Все процессы API используют одну таблицу; смена `TRAM_AUTH_TOKEN_SECRET` меняет HMAC и начинает новый набор счётчиков. При работе за обратным прокси настройте передачу доверенного адреса клиента на уровне ASGI-сервера: иначе лимит для одного логина объединит клиентов за этим прокси.
 
+## Пользователи API
+
+`POST /api/v1/auth/register` открыт без токена и создаёт пользователя с ролью `viewer`. После регистрации он входит через `POST /api/v1/auth/login`; токен viewer даёт доступ к чтению, но не к POST-операциям.
+
+Оператора создаёт только действующий operator через `POST /api/v1/auth/operators` с теми же полями `username` и `password`. Для первого оператора используйте настроенный `TRAM_OPERATOR_TOKEN`, если включён `allow_static_tokens`; последующих операторов можно создавать этим же ключом или JWT существующего оператора. Поле `role` в теле запроса запрещено.
+
+В Bruno-запросе `03-create-operator` переменная окружения `token` должна содержать действующий operator-токен. Запрос `04-login` войдёт под созданным `newoperator` и сохранит его JWT для следующих операций коллекции.
+
 ## Отчёты качества без обучения
 
 ```powershell
@@ -112,7 +120,7 @@ Set-Content models/tram/active_version.txt "baseline_v1"
 python -m tram.cli worker --once
 ```
 
-Каждый бандл содержит `manifest.json`, `checksums.json`, веса моделей (`models.joblib` / `profiles.joblib`), `model_card.md` и `environment.json`. При загрузке `ArtifactPredictor` валидирует контрольные суммы SHA-256. В случае повреждения или отсутствия бандла происходит автоматический fallback на `SeasonalNaive`.
+Каждый бандл содержит `manifest.json`, `estimator.joblib`, `features.json`, `config.json`, `metrics.json` и `model-card.md`. Манифест формата `1.0` хранит SHA-256 четырёх артефактов: оценщика, признаков, конфигурации и метрик. При загрузке `ArtifactPredictor` проверяет хеш оценщика и при ошибке переходит на `SeasonalNaive`. HTTP-реестр проверяет также JSON-файлы и показывает повреждённую версию с `status: invalid`; карточка этой версии отвечает `503`.
 
 ## Валидация конкурсного сабмита
 

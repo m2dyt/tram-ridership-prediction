@@ -10,6 +10,19 @@ class FakeUserRepository:
         self._users = {u["id"]: u for u in users}
         self._by_username = {u["username"]: u for u in users}
 
+    def create(self, user_id: str, username: str, password_hash: str, role: str):
+        if username in self._by_username:
+            raise ValueError("Username already exists")
+        user = {
+            "id": user_id,
+            "username": username,
+            "password_hash": password_hash,
+            "role": role,
+            "is_active": True,
+        }
+        self._users[user_id] = user
+        self._by_username[username] = user
+
     def get_by_username(self, username: str):
         return self._by_username.get(username)
 
@@ -179,6 +192,7 @@ def test_logout_everywhere(auth_service):
 def test_me(auth_service):
     user = auth_service.me("u1")
     assert user["username"] == "admin"
+    assert set(user) == {"id", "username", "role"}
 
     with pytest.raises(ApplicationError):
         auth_service.me("u2")  # inactive
@@ -225,3 +239,33 @@ def test_login_limit_is_per_username_and_ip_and_success_resets(auth_service):
         with pytest.raises(ApplicationError) as error:
             auth_service.login("admin", "wrong", "192.0.2.3")
         assert error.value.code == "UNAUTHORIZED"
+
+
+def test_register_creates_viewer(auth_service):
+    result = auth_service.register("new-viewer", "password123")
+
+    user = auth_service.users.get_by_id(result["id"])
+    assert user["role"] == "viewer"
+    assert user["password_hash"] == "hashed_password123"
+
+
+def test_register_rejects_duplicate_username(auth_service):
+    with pytest.raises(ApplicationError) as exc:
+        auth_service.register("admin", "password123")
+
+    assert exc.value.code == "VALIDATION_ERROR"
+
+
+def test_create_operator_assigns_operator_role(auth_service):
+    result = auth_service.create_operator("new-operator", "password123")
+
+    user = auth_service.users.get_by_id(result["id"])
+    assert user["role"] == "operator"
+    assert user["password_hash"] == "hashed_password123"
+
+
+def test_create_operator_rejects_duplicate_username(auth_service):
+    with pytest.raises(ApplicationError) as exc:
+        auth_service.create_operator("admin", "password123")
+
+    assert exc.value.code == "VALIDATION_ERROR"

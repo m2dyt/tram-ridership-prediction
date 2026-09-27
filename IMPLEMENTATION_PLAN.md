@@ -112,26 +112,28 @@
 
 Это в точности нерешённый пункт `F10` исходного плана (раздел 10 ниже): нужен согласованный показатель, порог, период и правило снятия предупреждения, и «спрос не должен называться перегрузом вагона» без проверки. Ничего из этого не появилось с момента первой формулировки, поэтому здесь не фиксируется число. Проектное place-holder — отдельная операция `GET /forecast-runs/{run_id}/alerts`, а не поле в самом `ForecastPoint`: чтобы не смешивать проверенный контракт прогноза с эвристикой сравнения, которая ещё не согласована. Реализация блокирована пунктом «порог» в таблице §6.
 
-### 4. `/api/v1/auth`: логин, refresh, logout
+### 4. `/api/v1/auth`: логин, refresh, logout и регистрация
 
-Сейчас единственный механизм — сравнение Bearer-токена с двумя константами из `.env` (`TRAM_VIEWER_TOKEN`/`TRAM_OPERATOR_TOKEN`, `hmac.compare_digest`, без пользователей, сессий и историй входа); это осознанное решение P0 для закрытого стенда (`openapi.yaml`: «Выдача токенов, регистрация и пароли не входят в P0»). Ниже — план для реального логина, который **добавляется параллельно**, не ломая уже документированный сценарий тестового стенда (`docs/TESTING.md`, `tests/browser_server.py` со своими фиксированными `browser-operator-...`/`browser-viewer-...` ключами).
+Статические Bearer-токены из `.env` (`TRAM_VIEWER_TOKEN`/`TRAM_OPERATOR_TOKEN`, сравнение через `hmac.compare_digest`) продолжают работать для закрытого стенда и тестов. Параллельно пользователи входят по логину/паролю; API выдаёт JWT и refresh-cookie. Публичная регистрация назначает только `viewer`; создание пользователя с ролью `operator` доступно лишь действующему оператору. Это сохраняет сценарии `docs/TESTING.md` и `tests/browser_server.py` со статическими ключами.
 
 #### 4.1 Эндпоинты
 
 | Операция | Тело/вход | Ответ 200 | Ошибки |
 | --- | --- | --- | --- |
+| `POST /auth/register` (`security: []`, публичная) | `{"username","password"}`; роль `viewer` задаёт сервер | `{"id"}` | `400` неверное тело, `422` поля не прошли контракт или имя уже занято |
+| `POST /auth/operators` (Bearer, роль operator) | `{"username","password"}`; роль задаёт сервер | `{"id"}` с новой учётной записью operator | `400` неверное тело, `401` нет/неверный токен, `403` роль viewer, `422` поля не прошли контракт или имя уже занято |
 | `POST /auth/login` (`security: []`, публичная) | `{"username","password"}` | `{"access_token","token_type":"bearer","expires_in","role","user":{"id","username"}}`; refresh — `Set-Cookie: tram_refresh=…; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` | `400` неверное тело, `401 UNAUTHORIZED` неверные логин/пароль (без уточнения, какое поле неверно), `429 RATE_LIMITED` при повторных неудачных попытках |
 
 Для `/auth/login` лимит составляет пять неудачных попыток на пару «логин + IP» за 15 минут от первой попытки. Следующий запрос получает `429` и `Retry-After` в секундах; успешный вход сбрасывает счётчик. Неизвестные и отключённые пользователи проходят то же правило. Счётчики хранятся в БД и истекают через 15 минут.
 | `POST /auth/refresh` (авторизация — cookie `tram_refresh`, не Bearer) | тело не требуется | новый `access_token` (как выше); refresh-cookie ротируется (старое значение отзывается) | `401 UNAUTHORIZED` — просрочен/отозван/отсутствует; фронт трактует как разлогин |
 | `POST /auth/logout` (cookie `tram_refresh`) | необязательно `{"everywhere":bool}` | `204`, отзыв refresh-сессии (или всех сессий пользователя), `Set-Cookie` с `Max-Age=0` | безопасно вызывать без активной сессии |
-| `GET /auth/me` (Bearer, viewer/operator) | — | `{"id","username","role","issued_at","expires_at"}` | `401` истёкший/невалидный access-токен |
+| `GET /auth/me` (Bearer, viewer/operator) | — | `{"id","username","role"}` | `401` истёкший/невалидный access-токен |
 
 Новых кодов в `Error.code` не требуется: используются уже существующие `UNAUTHORIZED`/`RATE_LIMITED`/`BAD_REQUEST`/`VALIDATION_ERROR` — намеренно без `INVALID_CREDENTIALS`/`TOKEN_EXPIRED`, чтобы не давать клиенту различать «неверный пароль» и «неверный логин» (тот же принцип, что уже в контракте: «Стек вызовов и идентификаторы пассажиров клиенту не выдаются»).
 
 #### 4.2 Хранение и миграция
 
-Новая ревизия `0004`: таблица `users` (`id` uuid pk, `username` unique, `password_hash`, `role` с тем же `CheckConstraint`, что у `RunRow.status`, `is_active`, `created_at`) и `refresh_tokens` (`id` pk, `user_id` fk, `token_hash` — хранится хэш, не сам токен, unique/indexed, `issued_at`, `expires_at`, `revoked_at` nullable, `replaced_by` nullable self-fk для цепочки ротации). Провижининг пользователей (кто и как создаёт `operator`/`viewer` аккаунты) не входит в этот раздел — открытый вопрос §6.
+Новая ревизия `0004`: таблица `users` (`id` uuid pk, `username` unique, `password_hash`, `role` с тем же `CheckConstraint`, что у `RunRow.status`, `is_active`, `created_at`) и `refresh_tokens` (`id` pk, `user_id` fk, `token_hash` — хранится хэш, не сам токен, unique/indexed, `issued_at`, `expires_at`, `revoked_at` nullable, `replaced_by` nullable self-fk для цепочки ротации). Публичная регистрация создаёт `viewer`; operator создаёт отдельный защищённый endpoint. Первого оператора можно добавить настроенным статическим operator-токеном, если включён `allow_static_tokens`, затем доступен вход существующего оператора по JWT.
 
 #### 4.3 Слои (по ADR 0001)
 
@@ -154,7 +156,7 @@
 | Идентификатор для логина | `username` в единой таблице `users`, роли `viewer`/`operator` как сейчас | Нужен ли email, SSO/OAuth — не следует из спецификации хакатона |
 | Где живёт refresh-токен | HttpOnly/Secure/SameSite=Strict cookie на `/api/v1/auth`, ротация при каждом refresh | Совместимо ли с нетипичными деплоями (отдельный Swagger UI из раздела 12 — другой origin, без cookie) |
 | Статические токены viewer/operator | Оставить рабочими параллельно (`allow_static_tokens`) — иначе ломается `tests/browser_server.py` и весь ручной сценарий `docs/TESTING.md` | Кто и когда отключает их в проде |
-| Провижининг пользователей | Не входит в этот раздел | CLI (`tram users create`), ручной SQL или отдельный этап |
+| Провижининг пользователей | Саморегистрация создаёт только `viewer`; `POST /auth/operators` требует operator Bearer-токен | Для первой учётной записи задать статический `TRAM_OPERATOR_TOKEN` при включённом `allow_static_tokens` |
 | Порог «повышенной загрузки» (трек Б, §3.3) | Не фиксировать сейчас | Показатель/порог/период/правило снятия — тот же открытый вопрос `F10`, что и раньше |
 | Множественные `route_id` в GET-фильтрах | `route_id=a,b,c` одним параметром (§2.2), не повтор параметра | Достаточен ли лимит 100, как в `max_routes_per_run` |
 | Push вместо поллинга статуса расчёта | Не делать сейчас: поллинг с `Retry-After` уже работает (§3.1–3.2); SSE/WebSocket — P2 | Появится ли нагрузка нескольких одновременных диспетчеров, оправдывающая эту инфраструктуру |
@@ -166,7 +168,7 @@
 | AUTH1 | Миграция `0004` (`users`, `refresh_tokens`); настройки `auth_token_secret`/`access_token_ttl_seconds`/`refresh_token_ttl_seconds`/`allow_static_tokens`; `pyjwt`/`argon2-cffi` в requirements.txt и pyproject.toml | Миграция применяется/откатывается, `alembic check` чист, зависимости ставятся в `.venv` |
 | AUTH2 | `application/auth.py` и порты `UserRepository`/`PasswordHasher`/`TokenIssuer`/`SessionStore` | Юнит-тесты сценариев проходят на фейковых портах; в `application` нет SQL/JWT-импортов |
 | AUTH3 | `infrastructure/auth.py`: SQL-репозиторий, argon2, выпуск/проверка JWT | Пароль не хранится и не логируется в открытом виде; просроченный/отозванный refresh отклоняется |
-| AUTH4 | `authorize()` принимает статический токен и JWT; операции `/auth/login|refresh|logout|me` в `openapi.yaml`, `extensions.py`, `app.py` | `tests/test_api.py` покрывает оба пути авторизации; `browser_server.py`/`TESTING.md` не сломаны |
+| AUTH4 | `authorize()` принимает статический токен и JWT; операции `/auth/register|operators|login|refresh|logout|me` в `openapi.yaml`, `extensions.py`, `app.py` | `tests/test_api.py` покрывает роли и оба пути авторизации; публичная регистрация не выдаёт operator; `browser_server.py`/`TESTING.md` не сломаны |
 | AUTH5 | Frontend: форма логина в `App.jsx` вместо поля «ключ», silent-refresh, `/auth/me` для отображения роли | Ручной сценарий `TESTING.md` пройден с реальным логином; ключ operator/viewer остаётся рабочим fallback'ом |
 | AUTH6 | ADR 0003 (авторизация: JWT + refresh-cookie + argon2, сосуществование со статическими токенами) после согласования §6 | ADR принят, ссылка добавлена в `docs/decisions/README.md` |
 | AUTH7 | Ограничить неудачные попытки `/auth/login` по паре логин + IP | После пяти ошибок за 15 минут API возвращает `429` с `Retry-After`; счётчик общий для процессов и сбрасывается после успешного входа |

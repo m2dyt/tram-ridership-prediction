@@ -104,6 +104,9 @@ def auth_bindings(service):
         },
         {
             "authRegister": lambda p, c, r: service.register(c["username"], c["password"]),
+            "authCreateOperator": lambda p, c, r: service.create_operator(
+                c["username"], c["password"]
+            ),
             "authLogin": lambda p, c, r: login(p, c, r),
             "authLogout": lambda p, c, r: logout(p, c, r),
         },

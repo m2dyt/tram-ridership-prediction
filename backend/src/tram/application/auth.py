@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from tram.application.errors import ApplicationError
 from tram.application.ports import (
@@ -41,12 +42,16 @@ class AuthService:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
     def register(self, username: str, password: str) -> dict:
-        import uuid
+        return self._create_user(username, password, "viewer")
 
-        user_id = str(uuid.uuid4())
+    def create_operator(self, username: str, password: str) -> dict:
+        return self._create_user(username, password, "operator")
+
+    def _create_user(self, username: str, password: str, role: str) -> dict:
+        user_id = str(uuid4())
         hashed = self.hasher.hash(password)
         try:
-            self.users.create(user_id, username, hashed, "operator")
+            self.users.create(user_id, username, hashed, role)
         except ValueError as exc:
             raise ApplicationError("VALIDATION_ERROR", "Username already exists") from exc
         return {"id": user_id}
@@ -120,4 +125,4 @@ class AuthService:
         user = self.users.get_by_id(user_id)
         if not user or not user.get("is_active"):
             raise ApplicationError("UNAUTHORIZED", "User not found or deactivated")
-        return user
+        return {key: user[key] for key in ("id", "username", "role")}
