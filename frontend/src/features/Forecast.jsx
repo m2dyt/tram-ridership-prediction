@@ -17,6 +17,7 @@ import {
 import Chart from "../components/Chart.jsx";
 import Map from "../components/Map.jsx";
 import ForecastAggregate from "./ForecastAggregate.jsx";
+import { levelName, spatialLabel } from "../domain/aggregate.js";
 import {
   date,
   horizonName,
@@ -113,6 +114,7 @@ export default function Forecast({ caps, route }) {
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {horizonName(p.horizon)} · {unitName(p.metric)}
+                  {levelName(p.spatial_level)}
                 </option>
               ))}
             </select>
@@ -290,7 +292,9 @@ function Result({ run, route }) {
                   }}
                 >
                   {keys.map((k) => (
-                    <option key={k}>{k}</option>
+                    <option key={k} value={k}>
+                      {spatialLabel(JSON.parse(k), route)}
+                    </option>
                   ))}
                 </select>
               </label>

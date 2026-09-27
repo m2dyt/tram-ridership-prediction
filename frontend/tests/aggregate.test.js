@@ -5,6 +5,7 @@ import {
   fromInput,
   groupOptions,
   lastInput,
+  levelName,
   spatialLabel,
   toInput,
 } from "../src/domain/aggregate.js";
@@ -79,4 +80,10 @@ test("spatial groups are labelled from the route catalogue", () => {
     "2. Парк",
   );
   assert.equal(spatialLabel({ segment_id: "g" }, route), "Депо → Парк");
+});
+
+test("profile labels tell stop-level forecasts from route totals", () => {
+  assert.equal(levelName("route"), "");
+  assert.equal(levelName("stop"), " · по остановкам");
+  assert.equal(levelName("segment"), " · по участкам");
 });

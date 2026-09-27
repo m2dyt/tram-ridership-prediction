@@ -83,6 +83,14 @@ export function groupOptions(resolution, level) {
 export const perInterval = (resolution) =>
   ({ hour: "час", day: "день", month: "месяц" })[resolution] || "интервал";
 
+// Suffix for a profile label; route totals need none.
+export const levelName = (level) =>
+  ({
+    route_direction: " · по направлениям",
+    stop: " · по остановкам",
+    segment: " · по участкам",
+  })[level] || "";
+
 export const isTimeGroup = (groupBy) => GRAIN.includes(groupBy);
 
 // Human label of a spatial group using the route catalogue.
@@ -109,3 +117,18 @@ export function spatialLabel(group, route) {
     ? `Маршрут ${route.route.number}`
     : group.route_id || "—";
 }
+
+// Hour starts of a forecast window, as ISO instants.
+export function forecastHours(startIso, endIso) {
+  const hours = [];
+  for (let ms = Date.parse(startIso); ms < Date.parse(endIso); ms += STEP.hour)
+    hours.push(new Date(ms).toISOString());
+  return hours;
+}
+
+export const strategyName = (strategy) =>
+  ({
+    uniform: "Равномерно по маршруту",
+    short: "Короткие поездки",
+    long: "Длинные поездки",
+  })[strategy] || strategy;

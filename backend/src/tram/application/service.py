@@ -5,6 +5,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from tram.application.errors import ApplicationError
+from tram.application.forecast_load import typical_trip_load
 from tram.application.mapping import spatial_from_document
 from tram.application.models import select_model
 from tram.application.ports import Clock, CursorCodec, Document, ModelCatalog, Repository
@@ -407,6 +408,36 @@ class ReadService:
             "page": page,
         }
 
+    @staticmethod
+    def validate_stop_range(network, profile, query):
+        """A route section is an inclusive range of stop positions in one direction."""
+        low, high = query.get("stop_sequence_from"), query.get("stop_sequence_to")
+        if low is None and high is None:
+            return
+        field = "stop_sequence_from" if low is not None else "stop_sequence_to"
+        if profile["spatial_level"] != "stop":
+            raise ApplicationError(
+                "UNSUPPORTED_PROFILE", "A stop range requires a stop-level profile", field
+            )
+        route_ids = query.get("route_id") or []
+        if len(route_ids) != 1:
+            raise ApplicationError("VALIDATION_ERROR", "A stop range requires one route_id", field)
+        if query.get("stop_id") is not None or query.get("stop_sequence") is not None:
+            raise ApplicationError(
+                "VALIDATION_ERROR", "A stop range cannot be combined with stop_id", field
+            )
+        if low is not None and high is not None and low > high:
+            raise ApplicationError(
+                "VALIDATION_ERROR", "stop_sequence_from must not exceed stop_sequence_to", field
+            )
+        route = next(r for r in network["routes"] if r["route"]["id"] == route_ids[0])
+        if len(route["directions"]) > 1 and not query.get("direction_id"):
+            raise ApplicationError(
+                "VALIDATION_ERROR",
+                "Stop positions differ between directions; set direction_id",
+                "direction_id",
+            )
+
     def aggregate(self, run_id, query):
         """Sum (or average, for non-additive metrics) stored points of one run.
 
@@ -425,6 +456,7 @@ class ReadService:
             raise ApplicationError(
                 "VALIDATION_ERROR", "Requested interval is outside the forecast period"
             )
+        self.validate_stop_range(self.network(run["network_revision_id"]), profile, query)
         group_by = GroupBy(query.get("group_by", GroupBy.NONE))
         try:
             check_group_by(group_by, resolution, SpatialLevel(profile["spatial_level"]))
@@ -453,9 +485,89 @@ class ReadService:
             "group_by": group_by.value,
             "filters": {
                 name: query.get(name)
-                for name in ("route_id", "direction_id", "stop_id", "stop_sequence", "segment_id")
+                for name in (
+                    "route_id",
+                    "direction_id",
+                    "stop_id",
+                    "stop_sequence",
+                    "segment_id",
+                    "stop_sequence_from",
+                    "stop_sequence_to",
+                )
             },
             **rollup.result(),
+        }
+
+    def trip_load(self, run_id, query):
+        """Expected load along one direction for a typical trip in one forecast hour."""
+        run = self.ready_run(run_id, query)
+        profile = run["profile"]
+        if profile["spatial_level"] != "stop" or profile["resolution"] != "hour":
+            raise ApplicationError(
+                "UNSUPPORTED_PROFILE", "Trip load needs an hourly stop-level forecast"
+            )
+        route_ids = query.get("route_id") or []
+        if len(route_ids) != 1:
+            raise ApplicationError("VALIDATION_ERROR", "Trip load needs one route_id", "route_id")
+        route = next(
+            r
+            for r in self.network(run["network_revision_id"])["routes"]
+            if r["route"]["id"] == route_ids[0]
+        )
+        directions = route["directions"]
+        if query.get("direction_id"):
+            directions = [d for d in directions if d["id"] == query["direction_id"]]
+        if len(directions) != 1 or not directions[0]["id"]:
+            raise ApplicationError(
+                "VALIDATION_ERROR", "Choose the direction the trip runs in", "direction_id"
+            )
+        direction = directions[0]
+        start = parse_time(query["interval_start"])
+        if not aligned(start, Resolution.HOUR) or not (
+            parse_time(run["forecast_start"]) <= start < parse_time(run["forecast_end"])
+        ):
+            raise ApplicationError(
+                "VALIDATION_ERROR", "interval_start must identify a forecast hour", "interval_start"
+            )
+        selection = {
+            "route_id": route_ids,
+            "direction_id": direction["id"],
+            "interval_start": start.isoformat(),
+        }
+        boardings = {}
+        offset = 0
+        while True:
+            rows = self.repository.forecast_points(run_id, selection, offset, AGGREGATE_BATCH)
+            for point in rows:
+                boardings[point["spatial"]["stop_sequence"]] = point["value"]
+            if len(rows) < AGGREGATE_BATCH:
+                break
+            offset += AGGREGATE_BATCH
+        trips = query.get("trips_per_hour", 8)
+        result = typical_trip_load(
+            sorted(direction["stops"], key=lambda s: s["sequence"]),
+            boardings,
+            start,
+            trips,
+            query.get("capacity"),
+            query.get("strategy", "uniform"),
+        )
+        flags = sorted({*result.pop("flags"), "estimated_from_forecast"})
+        return {
+            "run": run,
+            "route_id": route_ids[0],
+            "direction_id": direction["id"],
+            "interval_start": start.isoformat(),
+            "interval_end": advance(start, Resolution.HOUR).isoformat(),
+            "trips_per_hour": trips,
+            "capacity": query.get("capacity"),
+            "strategy": query.get("strategy", "uniform"),
+            **result,
+            "quality": {
+                "status": "partial" if "missing_forecast_points" in flags else "unverified",
+                "coverage_ratio": None,
+                "flags": flags,
+            },
         }
 
     def evaluations(self, query):

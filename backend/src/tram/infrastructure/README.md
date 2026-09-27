@@ -39,6 +39,7 @@ SQL, файловые форматы, HTTP, конфигурация и конт
 | [publication.py](publication.py) | SQL-публикация набора одной транзакцией, хеширование потока, пакетные вставки и блокировки повторов. |
 | [repository.py](repository.py) | SQL-чтение версий/точек/отчётов, очередь, идемпотентность запросов, lease/fencing и публикация прогнозов. |
 | [runtime.py](runtime.py) | Системные часы и подписанные HMAC курсоры пагинации. |
+| [shared_operator.py](shared_operator.py) | Общий оператор `operator` для локального стенда: создать или восстановить пароль, роль и активность. |
 | [settings.py](settings.py) | Типизированные TRAM_* настройки из .env/окружения; SecretStr и проверка ключей. |
 | [sources.py](sources.py) | Ограниченные HTTP-клиенты Open-Meteo, WeatherAPI, KudaGo, Timepad и нормализация ответов без утечки ключей. |
 | [trips.py](trips.py) | Постоянное состояние рейсов и журнал checkpoints, PostgreSQL-блокировки по trip_id. |

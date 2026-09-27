@@ -20,10 +20,14 @@ class FrozenClock:
         return self.value
 
 
-def fixture_bundle():
+def fixture_bundle(day_level="stop"):
     spec = yaml.safe_load((ROOT / "openapi.yaml").read_text(encoding="utf-8"))
     examples = spec["components"]["examples"]
     caps = copy.deepcopy(examples["Capabilities"]["value"])
+    # The contract example forecasts a day per stop; model-serving tests need route totals.
+    for profile in caps["observation_profiles"] + caps["forecast_profiles"]:
+        if profile["resolution"] == "hour":
+            profile["spatial_level"] = day_level
     route_id = "demo-route-01"
     stop = {
         "id": "demo-stop-01",
@@ -148,9 +152,9 @@ def _monthly_history(profile):
     return result
 
 
-def seed_trusted_fixture(sessions):
+def seed_trusted_fixture(sessions, day_level="stop"):
     """Only repository tests bypass the publication validator."""
-    manifest, records = fixture_bundle()
+    manifest, records = fixture_bundle(day_level)
     with sessions.begin() as session:
         from tram.infrastructure.database import UserRow
         session.add(UserRow(

@@ -207,6 +207,7 @@ def test_baseline_bundle_is_labelled_as_unfitted():
     [
         (ok_bundle(), {"id": "p-day", "resolution": "day"}, ("17",), "resolution is day"),
         (ok_bundle(), PROFILE, ("demo-route-01",), "route demo-route-01"),
+        (ok_bundle(), {**PROFILE, "spatial_level": "stop"}, ("17",), "spatial level is stop"),
         (ok_bundle(history_end="2026-09-21T00:00:00+03:00"), PROFILE, ("17",), "after as_of"),
         (INVALID, PROFILE, ("17",), "invalid and was not used"),
     ],
@@ -285,7 +286,7 @@ def pipeline():
     engine = make_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     sessions = session_factory(engine)
-    seed_trusted_fixture(sessions)
+    seed_trusted_fixture(sessions, day_level="route")
     repo, clock = SqlRepository(sessions), FrozenClock()
     reads = ReadService(repo, clock, SignedCursor("c" * 32))
     yield repo, clock, reads, sessions

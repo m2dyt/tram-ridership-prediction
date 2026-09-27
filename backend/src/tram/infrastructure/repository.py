@@ -52,6 +52,10 @@ def filtered_points(statement, table, query):
                 statement = statement.where(getattr(table, name) == val)
     if query.get("interval_start"):
         statement = statement.where(table.interval_start == parse_time(query["interval_start"]))
+    if query.get("stop_sequence_from") is not None:
+        statement = statement.where(table.stop_sequence >= query["stop_sequence_from"])
+    if query.get("stop_sequence_to") is not None:
+        statement = statement.where(table.stop_sequence <= query["stop_sequence_to"])
     return statement.order_by(
         table.interval_start,
         table.route_id,

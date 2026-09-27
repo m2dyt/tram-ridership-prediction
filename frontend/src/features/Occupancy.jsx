@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Fleet from "./Fleet.jsx";
+import ForecastLoad from "./ForecastLoad.jsx";
 import {
   Badge,
   Empty,
@@ -86,6 +87,7 @@ export default function Occupancy({ caps, route }) {
   }
   return (
     <>
+      <ForecastLoad caps={caps} route={route} />
       <section className="panel">
         <div className="section-heading">
           <div>

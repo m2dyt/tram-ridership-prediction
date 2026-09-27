@@ -103,8 +103,8 @@ function LoginPage() {
             <h2>{isRegistering ? "Создание учётной записи" : "Вход в систему"}</h2>
             <p className="login-lead-text">
               {isRegistering
-                ? "Новая учётная запись получает роль просмотра. Локальный оператор создаётся при первом запуске Docker."
-                : "Для локального входа используйте tram-admin и пароль TRAM_BOOTSTRAP_OPERATOR_PASSWORD из .env."}
+                ? "Новая учётная запись получает роль просмотра. Общий оператор operator создаётся миграцией и при каждом запуске Docker."
+                : "Общий оператор для локального стенда: логин operator, пароль — в docs/DOCKER_STACK.md."}
             </p>
           </div>
 

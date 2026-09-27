@@ -22,7 +22,7 @@
 | [check_docs.py](check_docs.py) | Проверка локальных Markdown-ссылок и наличия назначения каждого файла в README своей папки. |
 | [smoke_model_serving.py](smoke_model_serving.py) | Сквозная проверка работающего стека: поднимает `uvicorn` и `tram worker` против `TRAM_DATABASE_URL`, проходит `/health`, вход → `/auth/me` → refresh → logout (и отказ после них), реестр `/models` и прогноз по каждому профилю набора; с `--expect-bundle` требует, чтобы часовые запуски были закреплены за бандлом и совпадали с его прямым вызовом. Код выхода 0 только если всё прошло. |
 | [prepare_tram_challenge.py](prepare_tram_challenge.py) | Аудит, проверка схемы, расчёт SHA-256 хешей конкурсных датасетов и генерация provenance.json и manifest.json. |
-| [build_competition_bundle.py](build_competition_bundle.py) | Подготовка настоящих почасовых наблюдений и сети маршрутов для импорта в PostgreSQL. |
+| [build_competition_bundle.py](build_competition_bundle.py) | Подготовка настоящих почасовых наблюдений и сети маршрутов для импорта в PostgreSQL; дополнительно — оценённый профиль «сутки по остановкам» за последние 14 дней (распределение итога маршрута, `value_kind=estimated`). |
 | [import-dataset.sh](import-dataset.sh) | Генерация API-бандла и публикация ревизии конкурсных меток в базу. |
 | [train-model.sh](train-model.sh) | Обучение CPU-модели по меткам и запись версионированного бандла в том Docker. |
 | [bootstrap-operator.py](bootstrap-operator.py) | Создание локального оператора на пустой базе с паролем из `.env`. |

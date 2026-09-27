@@ -183,6 +183,10 @@ def create_http_app(
                 if not re.fullmatch(r"-?\d{1,12}", value):
                     raise ApplicationError("VALIDATION_ERROR", "Expected an integer", name)
                 value = int(value)
+            elif schema.get("type") == "number" and isinstance(value, str):
+                if not re.fullmatch(r"-?\d{1,12}(\.\d{1,12})?", value):
+                    raise ApplicationError("VALIDATION_ERROR", "Expected a number", name)
+                value = float(value)
             elif schema.get("type") == "boolean" and isinstance(value, str):
                 if value.lower() not in ("true", "false"):
                     raise ApplicationError("VALIDATION_ERROR", "Expected true or false", name)
@@ -236,6 +240,7 @@ def create_http_app(
         "getForecastRun": lambda p, q: reads.get_run(p["run_id"]),
         "getForecastPoints": lambda p, q: reads.points(p["run_id"], q),
         "getForecastAggregate": lambda p, q: reads.aggregate(p["run_id"], q),
+        "getForecastTripLoad": lambda p, q: reads.trip_load(p["run_id"], q),
         "getForecastMap": lambda p, q: JSONResponse(
             reads.map(p["run_id"], q), media_type="application/geo+json"
         ),

@@ -683,7 +683,8 @@ paths:
       summary: Агрегация прогноза по маршруту, остановке/участку и интервалу
       description: 'Только succeeded; иначе 409 RESULT_NOT_READY или RUN_FAILED. Сводит уже рассчитанные точки
         одного run — модель не запускается. Выбор точек совпадает с /points: те же пространственные фильтры
-        (AND; неизвестный ID — 404, неверная принадлежность или фильтр не того уровня — 422). from/to необязательны
+        (AND; неизвестный ID — 404, неверная принадлежность или фильтр не того уровня — 422). Участок маршрута
+        задаётся диапазоном позиций остановок stop_sequence_from..stop_sequence_to (включительно). from/to необязательны
         (по умолчанию весь период run), лежат внутри [forecast_start,forecast_end] и на сетке профиля.
         validations и boardings суммируются (statistic=sum); occupancy и occupancy_ratio не суммируются, а
         усредняются с весом длительности интервала (statistic=mean). Пропущенная точка не считается нулём: она
@@ -699,6 +700,8 @@ paths:
       - $ref: '#/components/parameters/StopId'
       - $ref: '#/components/parameters/StopSequence'
       - $ref: '#/components/parameters/SegmentId'
+      - $ref: '#/components/parameters/StopSequenceFrom'
+      - $ref: '#/components/parameters/StopSequenceTo'
       - $ref: '#/components/parameters/GroupBy'
       responses:
         '200':
@@ -712,6 +715,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ForecastAggregate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /forecast-runs/{run_id}/occupancy:
+    get:
+      tags:
+      - Forecasts
+      operationId: getForecastTripLoad
+      summary: Ожидаемая наполненность типового рейса по прогнозу
+      description: 'Только succeeded-run почасового профиля уровня stop; иначе 409/422. Для часа interval_start
+        посадки прогноза на каждой остановке делятся на trips_per_hour рейсов, высадки распределяет тот же
+        когортный движок, что и журнал /occupancy-trips (strategy). Результат — посадки, высадки и число
+        пассажиров в вагоне после каждой остановки; ничего не сохраняется и в журнал фактических рейсов не
+        пишется. На конечной посадок нет (флаг terminal_boardings_excluded). Пропуск прогноза — 0 посадок с
+        флагом missing_forecast_points. Оценка, а не измерение.'
+      parameters:
+      - $ref: '#/components/parameters/RunPath'
+      - $ref: '#/components/parameters/RouteId'
+      - $ref: '#/components/parameters/DirectionId'
+      - $ref: '#/components/parameters/IntervalStart'
+      - $ref: '#/components/parameters/TripsPerHour'
+      - $ref: '#/components/parameters/VehicleCapacity'
+      - $ref: '#/components/parameters/TripStrategy'
+      responses:
+        '200':
+          description: Успешный ответ.
+          headers:
+            X-Request-ID:
+              description: ID запроса для поиска в журнале.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastTripLoad'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1665,6 +1716,53 @@ components:
         type: string
         format: date-time
       example: '2026-09-21T10:00:00+03:00'
+    StopSequenceFrom:
+      name: stop_sequence_from
+      in: query
+      required: false
+      description: 'Участок маршрута: первая позиция остановки (включительно). Требует один route_id и профиль
+        уровня stop; при нескольких направлениях — direction_id. Несовместим с stop_id/stop_sequence.'
+      schema:
+        type: integer
+        minimum: 1
+    StopSequenceTo:
+      name: stop_sequence_to
+      in: query
+      required: false
+      description: Участок маршрута — последняя позиция остановки (включительно), не меньше stop_sequence_from.
+      schema:
+        type: integer
+        minimum: 1
+    TripsPerHour:
+      name: trips_per_hour
+      in: query
+      required: false
+      description: Сколько рейсов маршрута проходит за час; посадки часа делятся поровну между ними.
+      schema:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 60
+        default: 8
+    VehicleCapacity:
+      name: capacity
+      in: query
+      required: false
+      description: Вместимость вагона, пассажиров; без неё доля заполнения не считается.
+      schema:
+        type: number
+        exclusiveMinimum: 0
+    TripStrategy:
+      name: strategy
+      in: query
+      required: false
+      description: Допущение о длительности поездки (short/uniform/long), как в журнале наполненности.
+      schema:
+        type: string
+        enum:
+        - short
+        - uniform
+        - long
+        default: uniform
     GroupBy:
       name: group_by
       in: query
@@ -3431,7 +3529,17 @@ components:
           - stop_id
           - stop_sequence
           - segment_id
+          - stop_sequence_from
+          - stop_sequence_to
           properties:
+            stop_sequence_from:
+              anyOf:
+              - type: integer
+              - type: 'null'
+            stop_sequence_to:
+              anyOf:
+              - type: integer
+              - type: 'null'
             route_id:
               anyOf:
               - type: array
@@ -3471,6 +3579,109 @@ components:
           description: Пусто при group_by=none. Порядок — interval_start, route_id, direction_id, stop_sequence,
             stop_id, segment_id.
       description: Итог выбранной части прогноза. Значения получены из тех же точек, что и /points.
+    ForecastTripLoad:
+      type: object
+      additionalProperties: false
+      required:
+      - run
+      - route_id
+      - direction_id
+      - interval_start
+      - interval_end
+      - trips_per_hour
+      - capacity
+      - strategy
+      - stops
+      - summary
+      - quality
+      properties:
+        run:
+          $ref: '#/components/schemas/ForecastRun'
+        route_id:
+          type: string
+        direction_id:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        trips_per_hour:
+          type: number
+        capacity:
+          anyOf:
+          - type: number
+          - type: 'null'
+        strategy:
+          type: string
+          enum:
+          - short
+          - uniform
+          - long
+        stops:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - sequence
+            - stop_id
+            - boardings
+            - alightings
+            - onboard
+            - occupancy_ratio
+            - over_capacity
+            properties:
+              sequence:
+                type: integer
+                minimum: 1
+              stop_id:
+                type: string
+              boardings:
+                type: number
+                minimum: 0
+              alightings:
+                type: number
+                minimum: 0
+              onboard:
+                type: number
+                description: Пассажиров в вагоне после остановки (на следующем участке).
+              occupancy_ratio:
+                anyOf:
+                - type: number
+                - type: 'null'
+              over_capacity:
+                type: boolean
+        summary:
+          type: object
+          additionalProperties: false
+          required:
+          - boardings_per_trip
+          - peak_onboard
+          - peak_sequence
+          - peak_stop_id
+          - peak_occupancy_ratio
+          - over_capacity_stops
+          properties:
+            boardings_per_trip:
+              type: number
+            peak_onboard:
+              type: number
+            peak_sequence:
+              type: integer
+            peak_stop_id:
+              type: string
+            peak_occupancy_ratio:
+              anyOf:
+              - type: number
+              - type: 'null'
+            over_capacity_stops:
+              type: integer
+              minimum: 0
+        quality:
+          $ref: '#/components/schemas/Quality'
+      description: Оценка загрузки одного рейса по прогнозу посадок; не наблюдение и не журнал рейса.
     ModelSummary:
       type: object
       required:

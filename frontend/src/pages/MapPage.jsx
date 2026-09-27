@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { Map, Source, Layer, Popup, NavigationControl } from "@vis.gl/react-maplibre";
+import { mapLib } from "../components/mapLib.js";
 import { ClusterComponent } from "../components/ClusterComponent";
 import { useObservations } from "../api/hooks";
 import {
@@ -284,6 +285,7 @@ export default function MapPage({ route, caps }) {
         </button>
 
         <Map
+          mapLib={mapLib}
             style={{ width: "100%", height: "100%" }}
             ref={mapRef}
             onLoad={handleMapLoad}

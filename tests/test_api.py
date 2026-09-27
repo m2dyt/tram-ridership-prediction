@@ -478,6 +478,42 @@ def test_forecast_aggregate_by_route_stop_and_interval(api):
     checked(api, "GET", path + "/aggregate", params={"route_id": "missing"}, status=404)
 
 
+def test_forecast_aggregate_by_route_section(api):
+    path, run = completed_run(api, "day", "2026-09-21")
+    route = run["route_ids"][0]
+    total = checked(api, "GET", path + "/aggregate").json()["summary"]["value"]
+    section = {"route_id": route, "stop_sequence_from": 1, "stop_sequence_to": 1}
+    result = checked(api, "GET", path + "/aggregate", params=section).json()
+    assert result["summary"]["value"] == total
+    assert (result["filters"]["stop_sequence_from"], result["filters"]["stop_sequence_to"]) == (
+        1,
+        1,
+    )
+    beyond = {**section, "stop_sequence_from": 2, "stop_sequence_to": 5}
+    empty = checked(api, "GET", path + "/aggregate", params=beyond).json()["summary"]
+    assert empty["value"] is None and empty["quality"]["flags"] == ["empty_selection"]
+    for invalid in (
+        {**section, "stop_sequence_from": 3, "stop_sequence_to": 2},
+        {"stop_sequence_from": 1},
+        {**section, "stop_id": "demo-stop-01"},
+    ):
+        checked(api, "GET", path + "/aggregate", params=invalid, status=422)
+
+
+def test_trip_load_parses_numeric_query_parameters(api):
+    path, run = completed_run(api, "day", "2026-09-21")
+    query = {"route_id": run["route_ids"][0], "interval_start": run["forecast_start"]}
+    bad = checked(
+        api, "GET", path + "/occupancy", params={**query, "trips_per_hour": "x"}, status=422
+    )
+    assert bad.json()["details"][0]["field"] == "trips_per_hour"
+    # The fixture direction has a single stop: parsing passes, the trip itself is rejected.
+    one_stop = checked(
+        api, "GET", path + "/occupancy", params={**query, "trips_per_hour": "7.5"}, status=422
+    )
+    assert one_stop.json()["details"] == []
+
+
 @pytest.mark.parametrize(
     "horizon,start,group_by,groups",
     [("month", "2026-09-21", "day", 30), ("year", "2026-10-01", "month", 12)],
@@ -497,6 +533,13 @@ def test_forecast_aggregate_longer_horizons(api, horizon, start, group_by, group
         "GET",
         path + "/aggregate",
         params={"route_id": run["route_ids"][0], "stop_id": "demo-stop-01"},
+        status=422,
+    )
+    checked(
+        api,
+        "GET",
+        path + "/aggregate",
+        params={"route_id": run["route_ids"][0], "stop_sequence_from": 1},
         status=422,
     )
 

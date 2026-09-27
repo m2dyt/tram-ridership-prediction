@@ -16,7 +16,7 @@
 
 На macOS или Linux распакуй архив в корень проекта так, чтобы появились `dataset/labels/labels_day_train.csv`, `dataset/labels/labels_day_test.csv` и `dataset/test_submission.csv`. Затем запусти `sh scripts/start-stack.sh`. Скрипт поднимает PostgreSQL, применяет миграции, публикует факты из меток, обучает почасовую модель на CPU и запускает API с собранным фронтендом и worker.
 
-Открой [http://localhost:8000](http://localhost:8000) и войди как `tram-admin`. Пароль лежит в локальном `.env` под `TRAM_BOOTSTRAP_OPERATOR_PASSWORD`. Подробности команд и проверка числа строк описаны в [запуске Docker](docs/DOCKER_STACK.md).
+Открой [http://localhost:8000](http://localhost:8000) и войди общим оператором `operator`; пароль, одинаковый у всех установок, указан в [запуске Docker](docs/DOCKER_STACK.md#общий-оператор). Подробности команд и проверка числа строк описаны в [запуске Docker](docs/DOCKER_STACK.md).
 
 ## Что уже находится в коде
 

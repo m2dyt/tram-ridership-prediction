@@ -21,31 +21,12 @@ values = {
     "TRAM_OPERATOR_TOKEN": secrets.token_urlsafe(32),
     "TRAM_CURSOR_SECRET": secrets.token_urlsafe(32),
     "TRAM_AUTH_TOKEN_SECRET": secrets.token_urlsafe(32),
-    "TRAM_BOOTSTRAP_OPERATOR_USERNAME": "tram-admin",
-    "TRAM_BOOTSTRAP_OPERATOR_PASSWORD": secrets.token_urlsafe(32),
 }
 path.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
 path.chmod(0o600)
 print("Created .env with private local credentials.")
 PY
 fi
-
-python3 - <<'PY'
-import secrets
-from pathlib import Path
-
-path = Path(".env")
-contents = path.read_text(encoding="utf-8")
-additions = []
-if "TRAM_BOOTSTRAP_OPERATOR_USERNAME=" not in contents:
-    additions.append("TRAM_BOOTSTRAP_OPERATOR_USERNAME=tram-admin")
-if "TRAM_BOOTSTRAP_OPERATOR_PASSWORD=" not in contents:
-    additions.append(f"TRAM_BOOTSTRAP_OPERATOR_PASSWORD={secrets.token_urlsafe(32)}")
-if additions:
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write("\n" + "\n".join(additions) + "\n")
-path.chmod(0o600)
-PY
 
 for path in \
   dataset/labels/labels_day_train.csv \
@@ -75,4 +56,4 @@ docker compose exec -T db psql -U tram -d tram -P pager=off -c \
   "SELECT 'dataset_revisions' AS table_name, count(*) AS rows FROM dataset_revisions UNION ALL SELECT 'network_revisions', count(*) FROM network_revisions UNION ALL SELECT 'series', count(*) FROM series UNION ALL SELECT 'observations', count(*) FROM observations UNION ALL SELECT 'users', count(*) FROM users ORDER BY table_name;"
 printf '\n%s\n' "Frontend and API: http://localhost:8000"
 printf '%s\n' "Health endpoint: http://localhost:8000/api/v1/health"
-printf '%s\n' "Initial login: tram-admin; password is stored in .env as TRAM_BOOTSTRAP_OPERATOR_PASSWORD."
+printf '%s\n' "Shared operator login: operator; the password is in docs/DOCKER_STACK.md."

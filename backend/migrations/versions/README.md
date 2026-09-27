@@ -11,3 +11,4 @@
 | [0003_persist_trip_balance_and_context_.py](0003_persist_trip_balance_and_context_.py) | Таблицы рейсов, событий/checkpoints и внешних снимков; ограничения и индексы. |
 | [0004_auth.py](0004_auth.py) | Пользователи и refresh-сессии. |
 | [0005_login_attempts.py](0005_login_attempts.py) | Счётчики попыток входа и индекс для удаления истёкших окон. |
+| [0006_shared_operator.py](0006_shared_operator.py) | Общая учётная запись оператора `operator` (argon2-хеш), одинаковая у всех установок; downgrade её удаляет. |

@@ -3,6 +3,7 @@
 import json
 from datetime import timedelta
 
+from tram.domain.allocation import ESTIMATION_METHOD, stop_shares
 from tram.domain.time import MOSCOW, Resolution, add_months, advance
 
 
@@ -225,6 +226,80 @@ def write_demo(directory, now):
                 "as_of": midnight.isoformat(),
                 "forecast_start": start.isoformat(),
             }
+    # Stop-level day profile: the synthetic route total shared over its stops.
+    stop_observation_id, stop_profile_id = "demo-validations-stop-hour", "demo-validations-stop-day"
+    stop_history_start = midnight - timedelta(days=28)
+    shares = stop_shares({route_id: [s["id"] for s in stops]})[route_id]
+    stop_observed = {
+        **caps["observation_profiles"][0],
+        "id": stop_observation_id,
+        "spatial_level": "stop",
+        "history_start": stop_history_start.isoformat(),
+        "history_end": midnight.isoformat(),
+        "limitations": [warning, "Stop values are an estimated split of the route total"],
+    }
+    caps["observation_profiles"].append(stop_observed)
+    caps["forecast_profiles"].append(
+        {
+            **caps["forecast_profiles"][0],
+            "id": stop_profile_id,
+            "observation_profile_id": stop_observation_id,
+            "spatial_level": "stop",
+            "limitations": stop_observed["limitations"],
+        }
+    )
+    manifest["models"].append(
+        {
+            "profile_ids": [stop_profile_id],
+            "model": {**manifest["models"][0]["model"], "id": "seasonal-baseline-stop-day"},
+        }
+    )
+    stop_spatials = [
+        {
+            "level": "stop",
+            "route_id": route_id,
+            "direction_id": "demo-outbound",
+            "stop_id": stop["id"],
+            "stop_sequence": sequence,
+            "segment_id": None,
+        }
+        for sequence, stop in enumerate(stops, 1)
+    ]
+    for spatial, stop in zip(stop_spatials, stops, strict=True):
+        manifest["series"].append(
+            {
+                "profile_id": stop_observation_id,
+                "spatial": spatial,
+                "geometry": stop["geometry"],
+                "coverage_start": stop_history_start.isoformat(),
+                "coverage_end": midnight.isoformat(),
+            }
+        )
+    with (directory / "observations.jsonl").open("a", encoding="utf-8", newline="\n") as stream:
+        for spatial, share in zip(stop_spatials, shares, strict=True):
+            cursor = stop_history_start
+            while cursor < midnight:
+                end = advance(cursor, Resolution.HOUR)
+                record = {
+                    "profile_id": stop_observation_id,
+                    "available_at": end.isoformat(),
+                    "point": {
+                        "spatial": spatial,
+                        "interval_start": cursor.isoformat(),
+                        "interval_end": end.isoformat(),
+                        "value": round((30 + cursor.hour * 2) * share, 6),
+                        "missing_reason": None,
+                        "value_kind": "estimated",
+                        "estimation_method": ESTIMATION_METHOD,
+                        "quality": {
+                            "status": "unverified",
+                            "coverage_ratio": 1,
+                            "flags": ["synthetic_example", "estimated_stop_split"],
+                        },
+                    },
+                }
+                stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+                cursor = end
     started = midnight - timedelta(hours=12)
     trip_plan = {
         "trip_id": "demo-trip-" + midnight.strftime("%Y%m%d"),

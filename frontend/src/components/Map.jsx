@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import MapLibreMap, { Source, Layer } from "@vis.gl/react-maplibre";
+import { mapLib } from "./mapLib.js";
 import {
   CARTO_MAP_STYLE,
   FALLBACK_MAP_STYLE,
@@ -51,6 +52,7 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
   return (
     <div className="map-shell" style={{ height: "400px", width: "100%", position: "relative" }}>
       <MapLibreMap
+        mapLib={mapLib}
         initialViewState={{
           longitude: 37.628,
           latitude: 55.757,

@@ -11,12 +11,19 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+from tram.domain.allocation import ESTIMATION_METHOD, HUB_BONUS, stop_shares
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 ROUTE_NUMBERS = (1, 5, 7, 11, 12, 17, 25, 26, 28, 50)
 DATA_START = date(2025, 1, 1)
 DATA_END = date(2025, 11, 1)  # Exclusive; labels end on 2025-10-31.
 PROFILE_ID = "competition-boardings-route-hour"
+STOP_PROFILE_ID = "competition-boardings-stop-hour"
+STOP_FORECAST_ID = "competition-forecast-stop-day"
+# Seasonal naive needs the latest same weekday; two weeks keep the bundle small.
+STOP_HISTORY_DAYS = 14
+# Part of the revision hashes: a changed bundle layout must never reuse an old revision id.
+BUNDLE_FORMAT = "route-hour+stop-hour+line-ids-v3"
 
 
 def file_digest(paths: list[Path]) -> str:
@@ -100,7 +107,7 @@ def build_network(root: Path, network_id: str) -> tuple[dict, dict[str, dict], l
                 "warnings": route_warnings,
                 "directions": [
                     {
-                        "id": None,
+                        "id": line_id(route_id),
                         "name": f"Линия маршрута № {number}",
                         "stops": [
                             {"stop_id": stop["id"], "sequence": index}
@@ -114,6 +121,22 @@ def build_network(root: Path, network_id: str) -> tuple[dict, dict[str, dict], l
         )
 
     return {"id": network_id, "routes": network_routes}, geometries, warnings
+
+
+def line_id(route_id: str) -> str:
+    # The catalogue lists each route's stops as one line; occupancy trips need its id.
+    return f"line-{route_id}"
+
+
+def stop_spatial(route_id: str, stop_id: str, sequence: int) -> dict:
+    return {
+        "level": "stop",
+        "route_id": route_id,
+        "direction_id": line_id(route_id),
+        "stop_id": stop_id,
+        "stop_sequence": sequence,
+        "segment_id": None,
+    }
 
 
 def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[str, int]:
@@ -166,8 +189,12 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
         raise ValueError("test_submission.csv has an unexpected schema")
 
     label_hash = file_digest(labels_paths)
-    network_hash = file_digest(static_paths)[:12]
-    dataset_hash = hashlib.sha256(f"{label_hash}:{network_hash}".encode()).hexdigest()[:12]
+    network_hash = hashlib.sha256(
+        f"{file_digest(static_paths)}:{BUNDLE_FORMAT}".encode()
+    ).hexdigest()[:12]
+    dataset_hash = hashlib.sha256(
+        f"{label_hash}:{network_hash}:{BUNDLE_FORMAT}".encode()
+    ).hexdigest()[:12]
     dataset_id = f"competition-2025-{dataset_hash}"
     network_id = f"moscow-tram-{network_hash}"
     network, geometries, network_warnings = build_network(project_root, network_id)
@@ -175,6 +202,22 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
     history_start = datetime.combine(DATA_START, time.min, MOSCOW)
     history_end = datetime.combine(DATA_END, time.min, MOSCOW)
     as_of_start = history_start + timedelta(days=28)
+    stop_routes = {
+        route["route"]["id"]: [position["stop_id"] for position in route["directions"][0]["stops"]]
+        for route in network["routes"]
+        if route["directions"][0]["stops"]
+    }
+    shares = stop_shares(stop_routes)
+    stop_ids = {route["route"]["id"]: route["stops"] for route in network["routes"]}
+    stop_history_start = history_end - timedelta(days=STOP_HISTORY_DAYS)
+    stop_limitations = [
+        "Валидации не содержат остановку посадки: значения остановок — оценка, а не измерение.",
+        "Почасовые посадки маршрута распределены по его остановкам пропорционально весу: 1 за "
+        f"позицию и +{HUB_BONUS} за каждый другой маршрут, обслуживающий остановку "
+        "(пересадочный узел). Сумма по остановкам равна итогу маршрута.",
+        f"История по остановкам — последние {STOP_HISTORY_DAYS} суток; маршрут №5 без остановок "
+        "в справочнике не входит в профиль.",
+    ]
     all_buckets = (DATA_END - DATA_START).days * 24 * len(ROUTE_NUMBERS)
     counts_by_route = labels.groupby("route").size().to_dict()
     coverage_ratio = len(labels) / all_buckets
@@ -205,7 +248,19 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                     "history_end": history_end.isoformat(),
                     "aggregation_method": "sum",
                     "limitations": limitations,
-                }
+                },
+                {
+                    "id": STOP_PROFILE_ID,
+                    "metric": "boardings",
+                    "unit": "passengers",
+                    "spatial_level": "stop",
+                    "resolution": "hour",
+                    "route_ids": list(stop_routes),
+                    "history_start": stop_history_start.isoformat(),
+                    "history_end": history_end.isoformat(),
+                    "aggregation_method": "sum",
+                    "limitations": stop_limitations,
+                },
             ],
             "forecast_profiles": [
                 {
@@ -231,7 +286,32 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                         "Для API доступен почасовой прогноз на одни сутки.",
                         "Прогноз на ноябрь и декабрь для конкурсной отправки строится отдельной командой обучения.",
                     ],
-                }
+                },
+                {
+                    "id": STOP_FORECAST_ID,
+                    "metric": "boardings",
+                    "unit": "passengers",
+                    "spatial_level": "stop",
+                    "resolution": "hour",
+                    "route_ids": list(stop_routes),
+                    "aggregation_method": "sum",
+                    "observation_profile_id": STOP_PROFILE_ID,
+                    "horizon": "day",
+                    "availability": "available",
+                    "unavailable_reason": None,
+                    "allowed_as_of_start": (stop_history_start + timedelta(days=7)).isoformat(),
+                    "allowed_as_of_end": history_end.isoformat(),
+                    "forecast_start_min": history_end.isoformat(),
+                    "forecast_start_max": history_end.isoformat(),
+                    "start_alignment": "local_midnight",
+                    "evaluation_status": "pending",
+                    "prediction_interval_available": False,
+                    "limitations": [
+                        "Почасовой прогноз на сутки по остановкам — сезонная база на оценённом "
+                        "распределении; обученная модель маршрута здесь не применяется.",
+                        *stop_limitations,
+                    ],
+                },
             ],
             "max_page_size": 1000,
             "max_routes_per_run": 100,
@@ -243,7 +323,9 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                 "source": "validations",
                 "source_mode": "batch",
                 "event_watermark": latest_event.isoformat(),
-                "ingested_at": datetime.now(MOSCOW).isoformat(),
+                # Deterministic: rebuilding the same labels must yield identical content,
+                # otherwise re-importing an existing revision is rejected.
+                "ingested_at": history_end.isoformat(),
                 "freshness": "unknown",
                 "stale_after_seconds": None,
                 "quality": {
@@ -255,7 +337,7 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
         ],
         "models": [
             {
-                "profile_ids": ["competition-forecast-route-day"],
+                "profile_ids": ["competition-forecast-route-day", STOP_FORECAST_ID],
                 "model": {
                     "id": "seasonal-baseline-competition",
                     "version": "1",
@@ -282,6 +364,17 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                 "coverage_end": history_end.isoformat(),
             }
             for number in ROUTE_NUMBERS
+        ]
+        + [
+            {
+                "profile_id": STOP_PROFILE_ID,
+                "spatial": stop_spatial(route_id, stop_id, sequence),
+                "geometry": stop_ids[route_id][sequence - 1]["geometry"],
+                "coverage_start": stop_history_start.isoformat(),
+                "coverage_end": history_end.isoformat(),
+            }
+            for route_id, stops in stop_routes.items()
+            for sequence, stop_id in enumerate(stops, start=1)
         ],
     }
 
@@ -328,6 +421,40 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                     stream.write(json.dumps(record, ensure_ascii=False) + "\n")
                     record_count += 1
             current_date += timedelta(days=1)
+        current_date = stop_history_start.date()
+        while current_date < DATA_END:
+            for hour in range(24):
+                interval_start = datetime.combine(current_date, time(hour), MOSCOW)
+                interval_end = interval_start + timedelta(hours=1)
+                for route_id, stops in stop_routes.items():
+                    total = observed.get((int(route_id), current_date, hour))
+                    for sequence, (stop_id, share) in enumerate(
+                        zip(stops, shares[route_id], strict=True), start=1
+                    ):
+                        missing = total is None
+                        record = {
+                            "profile_id": STOP_PROFILE_ID,
+                            "available_at": interval_end.isoformat(),
+                            "point": {
+                                "spatial": stop_spatial(route_id, stop_id, sequence),
+                                "interval_start": interval_start.isoformat(),
+                                "interval_end": interval_end.isoformat(),
+                                "value": None if missing else round(total * share, 6),
+                                "value_kind": "estimated",
+                                "estimation_method": ESTIMATION_METHOD,
+                                "missing_reason": "not_present_in_source" if missing else None,
+                                "quality": {
+                                    "status": "missing" if missing else "unverified",
+                                    "coverage_ratio": 0.0 if missing else None,
+                                    "flags": ["missing_source_bucket"]
+                                    if missing
+                                    else ["estimated_stop_split"],
+                                },
+                            },
+                        }
+                        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        record_count += 1
+            current_date += timedelta(days=1)
 
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -335,7 +462,8 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
     print(f"Bundle: {output_dir}")
     print(f"Dataset revision: {dataset_id}")
     print(f"Network revision: {network_id}")
-    print(f"Routes: {len(ROUTE_NUMBERS)}; hourly buckets: {record_count:,}")
+    print(f"Routes: {len(ROUTE_NUMBERS)}; stop-level routes: {len(stop_routes)}")
+    print(f"Hourly records (routes + estimated stops): {record_count:,}")
     missing_route_five = all_buckets // len(ROUTE_NUMBERS) - counts_by_route.get(5, 0)
     print(f"Source coverage: {coverage_ratio:.2%}; missing route-5 buckets: {missing_route_five:,}")
     return dataset_id, record_count

@@ -46,11 +46,18 @@ export function useForecastPoints(runId, params = {}) {
     queryKey: ["forecast-points", runId, params],
     enabled: !!getToken() && !!runId,
     queryFn: async () => {
-      const data = await fetchJson(
-        `/forecast-runs/${encodeURIComponent(runId)}/points`,
-        { ...params, limit: 1000 },
-      );
-      return data.items || [];
+      // A stop-level run easily exceeds one page (stops × intervals); read every page.
+      const items = [];
+      let cursor;
+      do {
+        const data = await fetchJson(
+          `/forecast-runs/${encodeURIComponent(runId)}/points`,
+          { ...params, limit: 1000, cursor },
+        );
+        items.push(...(data.items || []));
+        cursor = data.page?.has_more ? data.page.next_cursor : undefined;
+      } while (cursor);
+      return items;
     },
   });
 }
@@ -72,6 +79,19 @@ export function useForecastAggregate(runId, params) {
     queryFn: () =>
       fetchJson(
         `/forecast-runs/${encodeURIComponent(runId)}/aggregate`,
+        params,
+      ),
+  });
+}
+
+export function useForecastTripLoad(runId, params) {
+  return useQuery({
+    queryKey: ["forecast-trip-load", runId, params],
+    enabled: !!getToken() && !!runId && !!params?.interval_start,
+    placeholderData: (previous) => previous,
+    queryFn: () =>
+      fetchJson(
+        `/forecast-runs/${encodeURIComponent(runId)}/occupancy`,
         params,
       ),
   });

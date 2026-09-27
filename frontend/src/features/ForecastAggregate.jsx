@@ -26,34 +26,48 @@ export default function ForecastAggregate({ run, route }) {
     direction: "",
     stop: "",
     segment: "",
+    sectionFrom: "",
+    sectionTo: "",
     groupBy: options[1]?.value || "none",
   };
   const [form, setForm] = useState(initial);
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
 
   const directions = route.directions || [];
-  const direction = directions.find((d) => d.id === form.direction);
-  const scope = direction ? [direction] : directions;
+  const namedDirections = directions.filter((d) => d.id);
+  const direction = namedDirections.find((d) => d.id === form.direction);
+  // Stop positions are unambiguous only inside one direction.
+  const line = direction || (directions.length === 1 ? directions[0] : null);
+  const scope = line ? [line] : directions;
   const stopNames = Object.fromEntries(
     (route.stops || []).map((s) => [s.id, s.name]),
   );
-  const stopChoices = scope.flatMap((d) =>
-    d.stops.map((s) => ({
-      value: direction ? `${s.stop_id}|${s.sequence}` : s.stop_id,
-      label: `${direction ? s.sequence + ". " : ""}${stopNames[s.stop_id] || s.stop_id}`,
-    })),
-  );
-  const uniqueStops = [
-    ...new Map(stopChoices.map((s) => [s.value, s])).values(),
-  ];
+  const positions = line ? sectionPositions(line, stopNames) : [];
+  const stopChoices = line
+    ? positions
+    : [
+        ...new Map(
+          scope
+            .flatMap((d) => d.stops)
+            .map((s) => [
+              s.stop_id,
+              { value: s.stop_id, label: stopNames[s.stop_id] || s.stop_id },
+            ]),
+        ).values(),
+      ];
   const segmentChoices = scope.flatMap((d) => d.segments || []);
+  const sectionOn = Boolean(form.sectionFrom || form.sectionTo);
+  const sectionFrom = Number(form.sectionFrom || positions[0]?.sequence);
+  const sectionTo = Number(form.sectionTo || positions.at(-1)?.sequence);
 
   const from = fromInput(form.from, resolution);
   const to = endFromInput(form.to, resolution);
   const periodError =
     from && to && new Date(from) >= new Date(to)
       ? "Начало периода должно быть не позже его конца."
-      : null;
+      : sectionOn && sectionFrom > sectionTo
+        ? "Первая остановка участка должна идти не позже последней."
+        : null;
 
   const params = useMemo(() => {
     if (!from || !to || periodError) return null;
@@ -66,9 +80,20 @@ export default function ForecastAggregate({ run, route }) {
       stop_id: stopId || undefined,
       stop_sequence: sequence || undefined,
       segment_id: form.segment || undefined,
+      stop_sequence_from: sectionOn ? sectionFrom : undefined,
+      stop_sequence_to: sectionOn ? sectionTo : undefined,
       group_by: form.groupBy,
     };
-  }, [from, to, periodError, form, route.route.id]);
+  }, [
+    from,
+    to,
+    periodError,
+    form,
+    route.route.id,
+    sectionOn,
+    sectionFrom,
+    sectionTo,
+  ]);
 
   const query = useForecastAggregate(run.id, params);
   const data = query.data;
@@ -125,13 +150,21 @@ export default function ForecastAggregate({ run, route }) {
           Направление
           <select
             value={form.direction}
-            disabled={!supports.direction}
+            disabled={!supports.direction || !namedDirections.length}
             onChange={(e) =>
-              set({ direction: e.target.value, stop: "", segment: "" })
+              set({
+                direction: e.target.value,
+                stop: "",
+                segment: "",
+                sectionFrom: "",
+                sectionTo: "",
+              })
             }
           >
-            <option value="">Все направления</option>
-            {directions.map((d) => (
+            <option value="">
+              {namedDirections.length ? "Все направления" : "Одна линия"}
+            </option>
+            {namedDirections.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
@@ -155,21 +188,51 @@ export default function ForecastAggregate({ run, route }) {
             </select>
           </label>
         ) : (
-          <label>
-            Остановка
-            <select
-              value={form.stop}
-              disabled={!supports.stop}
-              onChange={(e) => set({ stop: e.target.value })}
-            >
-              <option value="">Все остановки</option>
-              {uniqueStops.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <>
+            <label>
+              Остановка
+              <select
+                value={form.stop}
+                disabled={!supports.stop}
+                onChange={(e) =>
+                  set({ stop: e.target.value, sectionFrom: "", sectionTo: "" })
+                }
+              >
+                <option value="">Все остановки</option>
+                {stopChoices.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {["sectionFrom", "sectionTo"].map((key) => (
+              <label key={key}>
+                {key === "sectionFrom" ? "Участок: от" : "до остановки"}
+                <select
+                  value={form[key]}
+                  disabled={!supports.stop || !line}
+                  title={
+                    supports.stop && !line
+                      ? "Позиции остановок различаются по направлениям — выберите направление"
+                      : undefined
+                  }
+                  onChange={(e) => set({ [key]: e.target.value, stop: "" })}
+                >
+                  <option value="">
+                    {key === "sectionFrom"
+                      ? "с начала линии"
+                      : "до конца линии"}
+                  </option>
+                  {positions.map((s) => (
+                    <option key={s.sequence} value={s.sequence}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </>
         )}
         <label>
           Группировка
@@ -192,11 +255,15 @@ export default function ForecastAggregate({ run, route }) {
           Сбросить
         </button>
       </form>
-      {!supports.stop && !supports.segment && (
+      {!supports.stop && !supports.segment ? (
         <p className="muted">
-          Прогноз рассчитан на уровне маршрута: разрез по остановкам и участкам
-          доступен для профилей уровня «остановка» или «участок».
+          Прогноз рассчитан на уровне маршрута. Для разреза по остановкам и
+          участкам выберите горизонт с пометкой «по остановкам».
         </p>
+      ) : (
+        run.profile.limitations?.length > 0 && (
+          <p className="muted">{run.profile.limitations.join(" ")}</p>
+        )
       )}
       {periodError && <div className="notice error">{periodError}</div>}
       <ErrorBox error={query.error} />
@@ -299,4 +366,14 @@ function GroupTable({ groups, route, total, unit }) {
       </table>
     </div>
   );
+}
+
+function sectionPositions(line, stopNames) {
+  return [...line.stops]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((s) => ({
+      value: `${s.stop_id}|${s.sequence}`,
+      sequence: s.sequence,
+      label: `${s.sequence}. ${stopNames[s.stop_id] || s.stop_id}`,
+    }));
 }
