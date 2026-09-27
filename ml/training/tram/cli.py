@@ -50,6 +50,8 @@ def train_and_evaluate(
     save_candidate: bool = True,
     use_weather: bool = True,
     weather_path: Path | None = None,
+    use_route_features: bool = True,
+    route_features_path: Path | None = None,
     export_bundle_version: str | None = None,
     overwrite: bool = False,
     set_active: bool = False,
@@ -64,6 +66,8 @@ def train_and_evaluate(
         data_dir,
         use_weather=use_weather,
         weather_path=weather_path,
+        use_route_features=use_route_features,
+        route_features_path=route_features_path,
     )
 
     print(f"Train grid size: {len(grid_train):,} rows")
@@ -251,6 +255,17 @@ def main():
         help="Custom path to weather_hourly_2025.csv (defaults to data/weather_hourly_2025.csv)",
     )
     parser.add_argument(
+        "--no-route-features",
+        action="store_true",
+        help="Disable external route spatial and operational features",
+    )
+    parser.add_argument(
+        "--route-features-path",
+        type=Path,
+        default=None,
+        help="Custom path to tram_route_features.csv (defaults to data/tram_route_features.csv)",
+    )
+    parser.add_argument(
         "--export-bundle",
         type=str,
         default=None,
@@ -281,6 +296,8 @@ def main():
         eval_only=args.eval_only,
         use_weather=not args.no_weather,
         weather_path=args.weather_path,
+        use_route_features=not args.no_route_features,
+        route_features_path=args.route_features_path,
         export_bundle_version=args.export_bundle,
         set_active=args.set_active,
         overwrite=args.overwrite,
