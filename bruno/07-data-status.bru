@@ -14,3 +14,9 @@ auth:bearer {
   token: {{token}}
 }
 
+
+script:post-response {
+  if(res.status == 200) {
+    bru.setEnvVar('dataset_revision_id', res.body.dataset_revision_id);
+  }
+}

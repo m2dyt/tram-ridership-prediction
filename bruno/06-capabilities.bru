@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: http://localhost:8000/api/v1/capabilities
+  url: http://localhost:8000/api/v1/capabilities?dataset_revision_id={{dataset_revision_id}}
   body: none
   auth: bearer
 }
@@ -14,3 +14,13 @@ auth:bearer {
   token: {{token}}
 }
 
+
+script:post-response {
+  if(res.status == 200) {
+    let p = res.body.forecast_profiles[0];
+    bru.setEnvVar('as_of', p.allowed_as_of_start);
+    bru.setEnvVar('forecast_start', p.forecast_start_min);
+    bru.setEnvVar('network_revision_id', res.body.network_revision_id);
+    bru.setEnvVar('profile_id', p.id);
+  }
+}
