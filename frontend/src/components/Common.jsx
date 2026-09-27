@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { date, exportCsv } from "../domain/format.js";
+import { useDataStatus } from "../api/hooks";
 
 export function useResource(load, dependencies) {
   const [state, setState] = useState({
@@ -81,60 +82,72 @@ export function ExternalLink({ url, children }) {
   );
 }
 
-export function Freshness({ api, revision }) {
-  const [tick, setTick] = useState(0);
-  const status = useResource(
-    (signal) => api.request("/data-status", { signal }),
-    [api, tick],
-  );
-  useEffect(() => {
-    const timer = setInterval(() => setTick((v) => v + 1), 30000);
-    return () => clearInterval(timer);
-  }, []);
-  if (status.error) return <ErrorBox error={status.error} />;
-  if (!status.data) return null;
+export function Freshness({ revision }) {
+  const statusQuery = useDataStatus();
+  
+  if (statusQuery.isError) return <ErrorBox error={statusQuery.error} />;
+  if (!statusQuery.data || !statusQuery.data.sources) return null;
+  const status = { data: statusQuery.data };
   return (
-    <details>
-      <summary>
-        Свежесть источников · проверено {date(status.data.checked_at)}
-      </summary>
-      {status.data.dataset_revision_id !== revision ? (
-        <p className="notice">
-          Опубликована другая версия данных. Перезагрузите страницу для перехода
-          на неё; текущая выборка остаётся закреплённой.
-        </p>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Источник</th>
-                <th>Последнее событие</th>
-                <th>Загружено</th>
-                <th>Свежесть</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.data.sources.map((s) => (
-                <tr key={s.source}>
-                  <td>{s.source}</td>
-                  <td>{date(s.event_watermark)}</td>
-                  <td>{date(s.ingested_at)}</td>
-                  <td>
-                    {
-                      {
-                        fresh: "Актуально",
-                        stale: "Устарело",
-                        unknown: "Не определена",
-                      }[s.freshness]
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <details className="freshness-details">
+      <summary className="freshness-summary">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="freshness-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </span>
+          <span style={{ fontWeight: '600', color: '#1e293b' }}>Свежесть источников данных</span>
+          <span className="freshness-time">проверено {date(status.data.checked_at)}</span>
         </div>
-      )}
+        <svg className="freshness-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </summary>
+      
+      <div className="freshness-body">
+        {status.data.dataset_revision_id !== revision ? (
+          <p className="notice" style={{ margin: 0 }}>
+            Опубликована другая версия данных. Перезагрузите страницу для перехода
+            на неё; текущая выборка остаётся закреплённой.
+          </p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Источник</th>
+                  <th>Последнее событие</th>
+                  <th>Загружено</th>
+                  <th>Свежесть</th>
+                </tr>
+              </thead>
+              <tbody>
+                {status.data.sources.map((s) => (
+                  <tr key={s.source}>
+                    <td style={{ fontWeight: '600' }}>{s.source}</td>
+                    <td>{date(s.event_watermark)}</td>
+                    <td>{date(s.ingested_at)}</td>
+                    <td>
+                      <span className={`status-pill status-${s.freshness}`}>
+                        <span className="status-dot"></span>
+                        {
+                          {
+                            fresh: "Актуально",
+                            stale: "Устарело",
+                            unknown: "Не определена",
+                          }[s.freshness] || s.freshness
+                        }
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </details>
   );
 }

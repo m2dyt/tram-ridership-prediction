@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" version="1.1" width="96" height="96" viewBox="0 0 96 96">
+<defs>
+<clipPath id="clip_1">
+<path transform="matrix(1,0,0,-1,0,96)" d="M0 96H96V0H0Z"/>
+</clipPath>
+</defs>
+<g inkscape:groupmode="layer" inkscape:label="Layer 6">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="Layer 1">
+<g clip-path="url(#clip_1)">
+<path transform="matrix(1,0,0,-1,78.7646,47.917)" d="M0 0C0 3.982 2.532 7.541 6.301 8.855L8.235 9.562V29.917H-69.765V-15.104C-69.765-16.761-68.421-18.083-66.765-18.083-65.108-18.083-63.765-16.761-63.765-15.104V23.917H2.235L2.303 13.649C-2.74 11.032-6 5.789-6 0-6-5.79-2.739-11.033 2.303-13.65L2.25-24.083H-69.887V-30.083H8.235V-9.563L6.301-8.856C2.532-7.542 0-3.982 0 0" fill="#ed1a3b"/>
+<path transform="matrix(1,0,0,-1,0,96)" d="M33 66H39V30H33Z" fill="#ed1a3b"/>
+<g inkscape:groupmode="layer" inkscape:label="Layer 3">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="Layer 4">
+</g>
+</g>
+</g>
+</svg>

@@ -5,8 +5,8 @@ import {
   Empty,
   ErrorBox,
   Loading,
-  useResource,
 } from "../components/Common.jsx";
+import { useOccupancyTrips, useOccupancyEvents, useCreateOccupancyTrip, useApplyOccupancyEvent } from "../api/hooks";
 import {
   date,
   localInput,
@@ -15,31 +15,30 @@ import {
   statusName,
 } from "../domain/format.js";
 
-export default function Occupancy({ api, caps, route }) {
-  const [revision, setRevision] = useState(0),
-    [id, setId] = useState(""),
-    [error, setError] = useState(null),
-    [busy, setBusy] = useState(false);
-  const list = useResource(
-    (signal) => api.all("/occupancy-trips", {}, signal),
-    [api, revision],
-  );
+export default function Occupancy({ caps, route }) {
+  const [id, setId] = useState("");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  
+  const listQuery = useOccupancyTrips();
+  const list = {
+    data: listQuery.data,
+    loading: listQuery.isLoading,
+    error: listQuery.error
+  };
   const trips = (list.data || []).filter(
     (t) =>
       t.plan.network_revision_id === caps.network_revision_id &&
       t.plan.route_id === route.route.id,
   );
   const selected = trips.find((t) => t.id === id) || trips[0];
-  const events = useResource(
-    (signal) =>
-      selected
-        ? api.request(
-            `/occupancy-trips/${encodeURIComponent(selected.id)}/events`,
-            { signal },
-          )
-        : null,
-    [api, selected?.id, selected?.state.version],
-  );
+  
+  const eventsQuery = useOccupancyEvents(selected?.id);
+  const events = {
+    data: eventsQuery.data,
+    loading: eventsQuery.isLoading,
+    error: eventsQuery.error
+  };
   const [direction, setDirection] = useState(route.directions[0]?.id),
     [strategy, setStrategy] = useState("uniform"),
     [capacity, setCapacity] = useState("100"),
@@ -48,6 +47,8 @@ export default function Occupancy({ api, caps, route }) {
   const [started, setStarted] = useState(
     localInput(new Date(Date.now() - 3600000).toISOString()),
   );
+  const createMutation = useCreateOccupancyTrip();
+
   async function create(e) {
     e.preventDefault();
     setError(null);
@@ -74,9 +75,9 @@ export default function Occupancy({ api, caps, route }) {
           ).toISOString(),
         })),
       };
-      const result = await api.request("/occupancy-trips", { body: plan });
+      const result = await createMutation.mutateAsync(plan);
       setId(result.id);
-      setRevision((v) => v + 1);
+      listQuery.refetch();
     } catch (e) {
       setError(e);
     } finally {
@@ -196,7 +197,7 @@ export default function Occupancy({ api, caps, route }) {
           </label>
           <button
             className="secondary"
-            onClick={() => setRevision((v) => v + 1)}
+            onClick={() => listQuery.refetch()}
           >
             Обновить
           </button>
@@ -206,45 +207,42 @@ export default function Occupancy({ api, caps, route }) {
         ) : selected ? (
           <Trip
             key={selected.id + ":" + selected.state.version}
-            api={api}
             trip={selected}
             events={events}
-            onUpdate={() => setRevision((v) => v + 1)}
+            onUpdate={() => { listQuery.refetch(); eventsQuery.refetch(); }}
           />
         ) : (
           <Empty>Для маршрута пока нет рейсов.</Empty>
         )}
       </section>
-      <Fleet api={api} />
+      <Fleet />
     </>
   );
 }
 
-function Trip({ api, trip, events, onUpdate }) {
+function Trip({ trip, events, onUpdate }) {
   const next = trip.plan.stops[trip.state.next_stop_index];
   const [boardings, setBoardings] = useState("0"),
     [observed, setObserved] = useState(""),
     [at, setAt] = useState(localInput(next?.arrival_at)),
     [error, setError] = useState(null),
     [busy, setBusy] = useState(false);
+
+  const applyEventMutation = useApplyOccupancyEvent(trip.id);
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api.request(
-        `/occupancy-trips/${encodeURIComponent(trip.id)}/events`,
-        {
-          body: {
-            event_id: `visit-${next.sequence}`,
-            sequence: next.sequence,
-            occurred_at: moscowTime(at),
-            available_at: new Date().toISOString(),
-            boardings: Number(boardings),
-            observed_alightings: observed === "" ? null : Number(observed),
-          },
-        },
-      );
+      await applyEventMutation.mutateAsync({
+        event_id: `visit-${next.sequence}`,
+        sequence: next.sequence,
+        occurred_at: moscowTime(at),
+        available_at: new Date().toISOString(),
+        boardings: Number(boardings),
+        observed_alightings: observed === "" ? null : Number(observed),
+      });
       onUpdate();
     } catch (e) {
       setError(e);

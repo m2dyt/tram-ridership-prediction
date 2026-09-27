@@ -6,8 +6,8 @@ import {
   Empty,
   ErrorBox,
   Loading,
-  useResource,
 } from "../components/Common.jsx";
+import { useEvaluations, useEvaluation, useEvaluationPoints } from "../api/hooks";
 import {
   date,
   horizonName,
@@ -16,23 +16,23 @@ import {
   unitName,
 } from "../domain/format.js";
 
-export default function Evaluations({ api, caps }) {
-  const list = useResource(
-    (signal) =>
-      api.all(
-        "/evaluations",
-        { dataset_revision_id: caps.dataset_revision_id },
-        signal,
-      ),
-    [api, caps.dataset_revision_id],
-  );
+export default function Evaluations({ caps }) {
+  const listQuery = useEvaluations({ dataset_revision_id: caps.dataset_revision_id });
+  const list = {
+    data: listQuery.data,
+    loading: listQuery.isLoading,
+    error: listQuery.error
+  };
+
   const [id, setId] = useState("");
   const selected = id || list.data?.[0]?.id;
-  const report = useResource(
-    (signal) =>
-      selected ? api.request("/evaluations/" + selected, { signal }) : null,
-    [api, selected],
-  );
+  
+  const reportQuery = useEvaluation(selected);
+  const report = {
+    data: reportQuery.data,
+    loading: reportQuery.isLoading,
+    error: reportQuery.error
+  };
   return (
     <section className="panel">
       <div className="section-heading">
@@ -59,7 +59,7 @@ export default function Evaluations({ api, caps }) {
             </select>
           </label>
           {report.data && (
-            <Report key={selected} api={api} report={report.data} />
+            <Report key={selected} report={report.data} />
           )}
         </>
       ) : (
@@ -71,21 +71,21 @@ export default function Evaluations({ api, caps }) {
     </section>
   );
 }
-function Report({ api, report }) {
+function Report({ report }) {
   const [foldId, setFoldId] = useState(report.folds[0]?.id),
     [series, setSeries] = useState("");
   const fold = report.folds.find((f) => f.id === foldId);
-  const data = useResource(
-    (signal) =>
-      fold
-        ? api.all(
-            `/evaluations/${report.summary.id}/points`,
-            { fold_id: fold.id, from: fold.test_start, to: fold.test_end },
-            signal,
-          )
-        : [],
-    [api, report.summary.id, foldId],
-  );
+  
+  const dataQuery = useEvaluationPoints(report.summary.id, fold ? {
+    fold_id: fold.id,
+    from: fold.test_start,
+    to: fold.test_end
+  } : {});
+  const data = {
+    data: fold ? dataQuery.data : [],
+    loading: fold ? dataQuery.isLoading : false,
+    error: fold ? dataQuery.error : null
+  };
   const keys = [...new Set((data.data || []).map(seriesKey))];
   const points = (data.data || []).filter(
     (p) => seriesKey(p) === (series || keys[0]),

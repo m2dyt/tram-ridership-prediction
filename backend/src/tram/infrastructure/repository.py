@@ -45,7 +45,11 @@ def filtered_points(statement, table, query):
         statement = statement.where(table.interval_end <= parse_time(query["to"]))
     for name in ("route_id", "direction_id", "stop_id", "stop_sequence", "segment_id"):
         if query.get(name) is not None:
-            statement = statement.where(getattr(table, name) == query[name])
+            val = query[name]
+            if isinstance(val, (list, tuple, set)):
+                statement = statement.where(getattr(table, name).in_(val))
+            else:
+                statement = statement.where(getattr(table, name) == val)
     if query.get("interval_start"):
         statement = statement.where(table.interval_start == parse_time(query["interval_start"]))
     return statement.order_by(
@@ -195,9 +199,11 @@ class SqlRepository:
                 RunRow.forecast_start == parse_time(query["forecast_start"])
             )
         if query.get("route_id"):
+            val = query["route_id"]
+            cond = RunRouteRow.route_id.in_(val) if isinstance(val, (list, tuple, set)) else (RunRouteRow.route_id == val)
             statement = statement.where(
                 select(RunRouteRow.run_id)
-                .where(RunRouteRow.run_id == RunRow.id, RunRouteRow.route_id == query["route_id"])
+                .where(RunRouteRow.run_id == RunRow.id, cond)
                 .exists()
             )
         with self.sessions() as session:

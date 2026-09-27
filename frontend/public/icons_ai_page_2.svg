@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" version="1.1" width="96" height="96" viewBox="0 0 96 96">
+<defs>
+<clipPath id="clip_1">
+<path transform="matrix(1,0,0,-1,0,96)" d="M0 96H96V0H0Z"/>
+</clipPath>
+</defs>
+<g inkscape:groupmode="layer" inkscape:label="Layer 6">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="Layer 1">
+<path transform="matrix(1,0,0,-1,0,96)" d="M51 63H45V39H51Z" fill="#ed1a3b"/>
+<path transform="matrix(1,0,0,-1,0,96)" d="M45 27H51V33H45Z" fill="#ed1a3b"/>
+<g clip-path="url(#clip_1)">
+<path transform="matrix(1,0,0,-1,86.0266,65.3086)" d="M0 0-27.492 47.617C-29.745 51.519-33.779 53.848-38.284 53.848-42.789 53.848-46.823 51.519-49.075 47.617L-78.458-3.274C-79.286-4.709-78.795-6.544-77.36-7.372-75.925-8.202-74.09-7.709-73.262-6.274L-43.879 44.617C-42.711 46.641-40.619 47.848-38.284 47.848-35.948 47.848-33.856 46.641-32.688 44.617L-5.196-3C-4.028-5.022-4.028-7.438-5.196-9.461-6.364-11.483-8.456-12.691-10.792-12.691H-68.027V-18.691H-10.792C-6.287-18.691-2.253-16.362 0-12.461 2.252-8.56 2.252-3.901 0 0" fill="#ed1a3b"/>
+<g inkscape:groupmode="layer" inkscape:label="Layer 3">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="Layer 4">
+</g>
+</g>
+</g>
+</svg>
