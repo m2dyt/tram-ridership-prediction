@@ -26,6 +26,7 @@
 | [test_login_attempts.py](test_login_attempts.py) | Счётчик в SQLite: общий лимит, изоляция пары, истечение окна и очистка. |
 | [test_metro_pipeline.py](test_metro_pipeline.py) | Метро: нули/пропуски, ID, сохранение потока, контроль файлов, временная база, покрытие и CLI без БД. |
 | [test_ml_training.py](test_ml_training.py) | Проверка инженерии признаков без утечек и пайплайнов обучения/валидации моделей. |
+| [test_model_selection.py](test_model_selection.py) | Выбор модели при создании запуска, исполнение worker ровно закреплённой модели, политика отказа бандла, `/health` и настоящий экспортированный baseline-бандл. |
 | [test_occupancy.py](test_occupancy.py) | Три сценария, баланс, измеренные высадки, replay/конфликты и контракт API рейсов. |
 | [test_postgres.py](test_postgres.py) | Реальная конкурентность PostgreSQL: публикация, идемпотентность, SKIP LOCKED, fencing и события рейса. |
 | [test_publication.py](test_publication.py) | Атомарная публикация, повторы/ошибки/откат, demo и все горизонты. |

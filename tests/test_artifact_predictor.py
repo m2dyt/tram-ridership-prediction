@@ -52,8 +52,8 @@ class TestArtifactPredictor(unittest.TestCase):
             fallback=self.fallback,
         )
         self.assertIsNotNone(predictor, "Failed to load active version predictor")
-        self.assertTrue(predictor.method.startswith("tram_bundle_"))
-        self.assertIn("baseline_v1", predictor.method)
+        self.assertEqual(predictor.method, "tram_bundle")
+        self.assertEqual(predictor.version, active)
 
     def test_hourly_prediction_generation(self):
         """Predictor must generate hourly predictions with route 5 zero-forced."""
