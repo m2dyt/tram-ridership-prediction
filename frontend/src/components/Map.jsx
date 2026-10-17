@@ -50,7 +50,10 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
   }, [route]);
 
   return (
-    <div className="map-shell" style={{ height: "400px", width: "100%", position: "relative" }}>
+    <div
+      className="map-shell"
+      style={{ height: "400px", width: "100%", position: "relative" }}
+    >
       <MapLibreMap
         mapLib={mapLib}
         initialViewState={{
@@ -127,10 +130,51 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
         </div>
       )}
 
-      <div className="map-key" style={{ position: "absolute", bottom: "10px", left: "10px", background: "white", padding: "5px", borderRadius: "5px" }}>
-        <i style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#0076bc", marginRight: "5px" }} /> Маршрут 
-        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", border: "2px solid #0076bc", marginLeft: "10px", marginRight: "5px" }} /> Остановка 
-        <i style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#cc7a32", marginLeft: "10px", marginRight: "5px" }} /> Объект города
+      <div
+        className="map-key"
+        style={{
+          position: "absolute",
+          bottom: "10px",
+          left: "10px",
+          background: "white",
+          padding: "5px",
+          borderRadius: "5px",
+        }}
+      >
+        <i
+          style={{
+            display: "inline-block",
+            width: "10px",
+            height: "10px",
+            backgroundColor: "#0076bc",
+            marginRight: "5px",
+          }}
+        />{" "}
+        Маршрут
+        <i
+          style={{
+            display: "inline-block",
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            border: "2px solid #0076bc",
+            marginLeft: "10px",
+            marginRight: "5px",
+          }}
+        />{" "}
+        Остановка
+        <i
+          style={{
+            display: "inline-block",
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            backgroundColor: "#cc7a32",
+            marginLeft: "10px",
+            marginRight: "5px",
+          }}
+        />{" "}
+        Объект города
       </div>
     </div>
   );

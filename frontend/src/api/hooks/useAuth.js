@@ -9,13 +9,13 @@ export function useLogin() {
       const res = await apiFetch("/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
-        credentials: "include"
+        credentials: "include",
       });
       return res.json();
     },
     onSuccess: (data) => {
       updateToken(data.access_token);
-    }
+    },
   });
 }
 
@@ -27,18 +27,21 @@ export function useRegister() {
         body: JSON.stringify({ username, password }),
       });
       return res.json();
-    }
+    },
   });
 }
 
 export function useLogout() {
   return useMutation({
     mutationFn: async () => {
-      await apiFetch("/auth/logout", { method: "POST", credentials: "include" });
+      await apiFetch("/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
     },
     onSettled: () => {
       updateToken(null);
-    }
+    },
   });
 }
 
@@ -50,7 +53,7 @@ export function useCreateOperator() {
         body: JSON.stringify({ username, password }),
       });
       return res.json();
-    }
+    },
   });
 }
 

@@ -34,5 +34,6 @@ API-прокси по умолчанию: 127.0.0.1:8000; интерфейс: 12
 
 ## Подпапки
 
+- [public](public/README.md).
 - [src](src/README.md).
 - [tests](tests/README.md).

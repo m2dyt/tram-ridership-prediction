@@ -7,7 +7,10 @@ export async function fetchJson(path, params = {}) {
       searchParams.append(key, value);
     }
   }
-  const url = Array.from(searchParams.keys()).length > 0 ? `${path}?${searchParams.toString()}` : path;
+  const url =
+    Array.from(searchParams.keys()).length > 0
+      ? `${path}?${searchParams.toString()}`
+      : path;
   const res = await apiFetch(url);
   return res.json();
 }

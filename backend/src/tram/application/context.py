@@ -40,12 +40,12 @@ class ContextService:
     def geojson(self, snapshot_id: str):
         doc = self.get(snapshot_id)
         features = []
-        for r in doc.get('records', []):
-            if 'geometry' in r and r['geometry']:
+        for r in doc.get("records", []):
+            if "geometry" in r and r["geometry"]:
                 feat = {
                     "type": "Feature",
                     "geometry": r["geometry"],
-                    "properties": {k: v for k, v in r.items() if k != "geometry"}
+                    "properties": {k: v for k, v in r.items() if k != "geometry"},
                 }
                 features.append(feat)
         return {"type": "FeatureCollection", "features": features}

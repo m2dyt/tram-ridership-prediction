@@ -6,7 +6,11 @@ export function useNetwork(networkId, validAt) {
   return useQuery({
     queryKey: ["network", networkId, validAt],
     enabled: !!getToken() && !!networkId && !!validAt,
-    queryFn: () => fetchJson("/network", { network_revision_id: networkId, valid_at: validAt }),
+    queryFn: () =>
+      fetchJson("/network", {
+        network_revision_id: networkId,
+        valid_at: validAt,
+      }),
   });
 }
 
@@ -15,7 +19,11 @@ export function useRoutes(networkId, validAt) {
     queryKey: ["routes", networkId, validAt],
     enabled: !!getToken() && !!networkId && !!validAt,
     queryFn: async () => {
-      const data = await fetchJson("/routes", { network_revision_id: networkId, valid_at: validAt, limit: 1000 });
+      const data = await fetchJson("/routes", {
+        network_revision_id: networkId,
+        valid_at: validAt,
+        limit: 1000,
+      });
       return data.items || [];
     },
   });
@@ -25,7 +33,11 @@ export function useRoute(routeId, networkId, validAt) {
   return useQuery({
     queryKey: ["route", routeId, networkId, validAt],
     enabled: !!getToken() && !!routeId && !!networkId && !!validAt,
-    queryFn: () => fetchJson(`/routes/${encodeURIComponent(routeId)}`, { network_revision_id: networkId, valid_at: validAt }),
+    queryFn: () =>
+      fetchJson(`/routes/${encodeURIComponent(routeId)}`, {
+        network_revision_id: networkId,
+        valid_at: validAt,
+      }),
   });
 }
 
@@ -34,7 +46,12 @@ export function useStops(networkId, validAt, routeId = null) {
     queryKey: ["stops", networkId, validAt, routeId],
     enabled: !!getToken() && !!networkId && !!validAt,
     queryFn: async () => {
-      const data = await fetchJson("/stops", { network_revision_id: networkId, valid_at: validAt, route_id: routeId, limit: 1000 });
+      const data = await fetchJson("/stops", {
+        network_revision_id: networkId,
+        valid_at: validAt,
+        route_id: routeId,
+        limit: 1000,
+      });
       return data.items || [];
     },
   });

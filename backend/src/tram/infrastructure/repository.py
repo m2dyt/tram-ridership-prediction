@@ -193,7 +193,7 @@ class SqlRepository:
             statement = statement.where(
                 RunRow.status == query["status"], RunRow.finished_at <= before
             )
-            
+
         if query.get("active"):
             statement = statement.where(
                 or_(RunRow.finished_at.is_(None), RunRow.finished_at > before)
@@ -204,11 +204,13 @@ class SqlRepository:
             )
         if query.get("route_id"):
             val = query["route_id"]
-            cond = RunRouteRow.route_id.in_(val) if isinstance(val, (list, tuple, set)) else (RunRouteRow.route_id == val)
+            cond = (
+                RunRouteRow.route_id.in_(val)
+                if isinstance(val, (list, tuple, set))
+                else (RunRouteRow.route_id == val)
+            )
             statement = statement.where(
-                select(RunRouteRow.run_id)
-                .where(RunRouteRow.run_id == RunRow.id, cond)
-                .exists()
+                select(RunRouteRow.run_id).where(RunRouteRow.run_id == RunRow.id, cond).exists()
             )
         with self.sessions() as session:
             return [

@@ -15,6 +15,7 @@ sources/*
 !sources/README.md
 data/*
 !data/README.md
+!data/tramlanes.geojson
 models/*
 !models/README.md
 logs/
@@ -23,4 +24,5 @@ logs/
 .vscode/
 dataset/*
 !dataset/PROJECT_DATA.md
+!dataset/README.md
 catboost_info/

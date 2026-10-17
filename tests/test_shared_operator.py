@@ -9,8 +9,8 @@ from tests.support import NOW, ROOT
 def test_documented_password_matches_the_stored_hash():
     docs = (ROOT / "docs/DOCKER_STACK.md").read_text(encoding="utf-8")
     assert "| `operator` | `Tram-Operator-2025` |" in docs
-    web_doc = (ROOT / "WEB_SERVICE_DOC.md").read_text(encoding="utf-8")
-    assert "- Логин: operator\n- Пароль: Tram-Operator-2025\n" in web_doc
+    api_doc = (ROOT / "docs/API_GUIDE.md").read_text(encoding="utf-8")
+    assert "- **Логин:** `operator`\n- **Пароль:** `Tram-Operator-2025`" in api_doc
     assert Argon2PasswordHasher().verify(PASSWORD_HASH, "Tram-Operator-2025")
 
 

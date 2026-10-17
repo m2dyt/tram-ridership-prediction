@@ -38,17 +38,21 @@ export function useOccupancyEvents(tripId) {
   return useQuery({
     queryKey: ["occupancy-events", tripId],
     enabled: !!getToken() && !!tripId,
-    queryFn: () => fetchJson(`/occupancy-trips/${encodeURIComponent(tripId)}/events`),
+    queryFn: () =>
+      fetchJson(`/occupancy-trips/${encodeURIComponent(tripId)}/events`),
   });
 }
 
 export function useApplyOccupancyEvent(tripId) {
   return useMutation({
     mutationFn: async (payload) => {
-      const res = await apiFetch(`/occupancy-trips/${encodeURIComponent(tripId)}/events`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      const res = await apiFetch(
+        `/occupancy-trips/${encodeURIComponent(tripId)}/events`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
       return res.json();
     },
   });

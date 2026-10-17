@@ -157,14 +157,17 @@ def seed_trusted_fixture(sessions, day_level="stop"):
     manifest, records = fixture_bundle(day_level)
     with sessions.begin() as session:
         from tram.infrastructure.database import UserRow
-        session.add(UserRow(
-            id="test-user-id",
-            username="testuser",
-            password_hash="$argon2id$v=19$m=65536,t=3,p=4$uqG+/6EJC1qXiDhuFtNm0A$HpiQCHe1bqDqPb6uTvUQekcIW7i0hIuFwXZYu3i0IYE", # "password"
-            role="operator",
-            is_active=True,
-            created_at=NOW
-        ))
+
+        session.add(
+            UserRow(
+                id="test-user-id",
+                username="testuser",
+                password_hash="$argon2id$v=19$m=65536,t=3,p=4$uqG+/6EJC1qXiDhuFtNm0A$HpiQCHe1bqDqPb6uTvUQekcIW7i0hIuFwXZYu3i0IYE",  # "password"
+                role="operator",
+                is_active=True,
+                created_at=NOW,
+            )
+        )
         session.add(NetworkRow(id=manifest["network"]["id"], document=manifest["network"]))
         session.flush()
         session.add(

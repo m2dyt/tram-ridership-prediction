@@ -8,7 +8,7 @@ export default function ModelsPage() {
   const models = {
     data: modelsQuery.data,
     loading: modelsQuery.isLoading,
-    error: modelsQuery.error
+    error: modelsQuery.error,
   };
 
   const [selectedId, setSelectedId] = useState("");
@@ -18,16 +18,20 @@ export default function ModelsPage() {
   const model = {
     data: modelQuery.data,
     loading: modelQuery.isLoading,
-    error: modelQuery.error
+    error: modelQuery.error,
   };
 
   return (
     <>
       <div className="mgt-page-hero">
         <div className="mgt-page-hero-content">
-          <div className="mgt-page-hero-title">Математическое моделирование и аналитика</div>
+          <div className="mgt-page-hero-title">
+            Математическое моделирование и аналитика
+          </div>
           <p className="mgt-page-hero-desc">
-            Централизованный реестр прогностических моделей пассажиропотока трамвайной сети ГУП «Мосгортранс». Мониторинг версий, метрик MAE/WAPE и статусов инференса.
+            Централизованный реестр прогностических моделей пассажиропотока
+            трамвайной сети ГУП «Мосгортранс». Мониторинг версий, метрик
+            MAE/WAPE и статусов инференса.
           </p>
         </div>
         <div className="mgt-page-hero-badge">Мосгортранс · ML Core</div>
@@ -41,13 +45,13 @@ export default function ModelsPage() {
           </div>
           <Badge>Реестр алгоритмов</Badge>
         </div>
-        
+
         <ErrorBox error={models.error} />
-        
+
         {models.loading ? (
           <Loading />
         ) : models.data?.length > 0 ? (
-          <div className="run-selector" style={{ marginTop: '20px' }}>
+          <div className="run-selector" style={{ marginTop: "20px" }}>
             <label>
               Доступные модели
               <select
@@ -61,10 +65,7 @@ export default function ModelsPage() {
                 ))}
               </select>
             </label>
-            <button
-              className="secondary"
-              onClick={() => modelsQuery.refetch()}
-            >
+            <button className="secondary" onClick={() => modelsQuery.refetch()}>
               Обновить список
             </button>
           </div>
@@ -74,39 +75,60 @@ export default function ModelsPage() {
       </section>
 
       {model.data && (
-        <section className="panel" style={{ marginTop: '20px' }}>
+        <section className="panel" style={{ marginTop: "20px" }}>
           <div className="section-heading">
             <h2>Детали модели: {model.data.version}</h2>
-            {model.data.is_active && <Badge tone="primary">Активная (Active)</Badge>}
+            {model.data.is_active && (
+              <Badge tone="primary">Активная (Active)</Badge>
+            )}
           </div>
-          
+
           <ErrorBox error={model.error} />
-          
+
           {model.loading ? (
             <Loading />
           ) : (
             <>
-              <div className="stat-grid" style={{ marginBottom: '20px' }}>
+              <div className="stat-grid" style={{ marginBottom: "20px" }}>
                 <div className="stat">
                   <span>Статус</span>
-                  <strong className="word-stat">{statusName(model.data.status)}</strong>
+                  <strong className="word-stat">
+                    {statusName(model.data.status)}
+                  </strong>
                   <small>Текущее состояние</small>
                 </div>
                 <div className="stat">
                   <span>Метрика (WAPE)</span>
-                  <strong>{model.data.metrics?.overall?.wape != null ? number(model.data.metrics.overall.wape * 100) + '%' : "—"}</strong>
+                  <strong>
+                    {model.data.metrics?.overall?.wape != null
+                      ? number(model.data.metrics.overall.wape * 100) + "%"
+                      : "—"}
+                  </strong>
                   <small>Качество на валидации</small>
                 </div>
                 <div className="stat">
                   <span>Score</span>
-                  <strong>{model.data.metrics?.overall?.wape_score != null ? number(model.data.metrics.overall.wape_score) : "—"}</strong>
+                  <strong>
+                    {model.data.metrics?.overall?.wape_score != null
+                      ? number(model.data.metrics.overall.wape_score)
+                      : "—"}
+                  </strong>
                   <small>Общий балл</small>
                 </div>
               </div>
-              
-              <div style={{ marginTop: '20px' }}>
+
+              <div style={{ marginTop: "20px" }}>
                 <h3>Паспорт модели (Model Card)</h3>
-                <pre style={{ background: 'var(--bg-panel)', padding: '16px', borderRadius: '8px', overflowX: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                <pre
+                  style={{
+                    background: "var(--bg-panel)",
+                    padding: "16px",
+                    borderRadius: "8px",
+                    overflowX: "auto",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "monospace",
+                  }}
+                >
                   {model.data.card || "Описание отсутствует"}
                 </pre>
               </div>

@@ -30,7 +30,9 @@ METRO_KEYWORDS: list[str] = [
 ]
 
 
-def haversine_distance_km(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
+def haversine_distance_km(
+    lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray
+) -> np.ndarray:
     """Calculate the great circle distance between two points on the earth in km."""
     r = 6371.0  # Earth's radius in kilometers
     phi1 = np.radians(lat1)
@@ -43,7 +45,9 @@ def haversine_distance_km(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, 
     return r * c
 
 
-def point_to_segment_dist_m(plat: float, plon: float, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def point_to_segment_dist_m(
+    plat: float, plon: float, lat1: float, lon1: float, lat2: float, lon2: float
+) -> float:
     """Calculate orthogonal distance from point to segment in meters."""
     dx = (lon2 - lon1) * 62392.0
     dy = (lat2 - lat1) * 111139.0
@@ -129,7 +133,9 @@ def extract_features(
         unique_stops = r_stops.drop_duplicates(subset=["stop_id"]).copy()
         num_stops = len(unique_stops)
         unique_stops["route"] = route
-        clean_stops_list.append(unique_stops[["route", "stop_id", "name", "last_stop_name", "lon", "lat"]])
+        clean_stops_list.append(
+            unique_stops[["route", "stop_id", "name", "last_stop_name", "lon", "lat"]]
+        )
 
         # Metro connectivity
         name_lower = unique_stops["name"].fillna("").str.lower()
@@ -140,7 +146,9 @@ def extract_features(
         # Centroid and distance to Moscow center
         mean_lat = float(unique_stops["lat"].mean())
         mean_lon = float(unique_stops["lon"].mean())
-        dist_to_center = float(haversine_distance_km(mean_lat, mean_lon, MOSCOW_CENTER_LAT, MOSCOW_CENTER_LON))
+        dist_to_center = float(
+            haversine_distance_km(mean_lat, mean_lon, MOSCOW_CENTER_LAT, MOSCOW_CENTER_LON)
+        )
 
         # Order stops and calculate route length
         ordered_coords = r_stops.drop_duplicates(subset=["lat", "lon"])[["lat", "lon"]].values
@@ -179,7 +187,10 @@ def extract_features(
                 min_d = 999999.0
                 best_t = "Обособленные"
                 for lat1, lon1, lat2, lon2, t in moscow_segments:
-                    if abs(slat - (lat1 + lat2) / 2) > 0.003 or abs(slon - (lon1 + lon2) / 2) > 0.005:
+                    if (
+                        abs(slat - (lat1 + lat2) / 2) > 0.003
+                        or abs(slon - (lon1 + lon2) / 2) > 0.005
+                    ):
                         continue
                     d = point_to_segment_dist_m(slat, slon, lat1, lon1, lat2, lon2)
                     if d < min_d:
@@ -194,7 +205,9 @@ def extract_features(
                     segregated_stops += 1
 
         tot_matched = segregated_stops + shared_stops
-        segregated_ratio = round(segregated_stops / max(1, tot_matched), 4) if tot_matched > 0 else 1.0
+        segregated_ratio = (
+            round(segregated_stops / max(1, tot_matched), 4) if tot_matched > 0 else 1.0
+        )
 
         route_metrics.append(
             {
@@ -256,7 +269,9 @@ def extract_features(
 
     # DataFrames assembly
     df_features = pd.DataFrame(route_metrics)
-    df_stops = pd.concat(clean_stops_list, ignore_index=True) if clean_stops_list else pd.DataFrame()
+    df_stops = (
+        pd.concat(clean_stops_list, ignore_index=True) if clean_stops_list else pd.DataFrame()
+    )
     geojson_data = {
         "type": "FeatureCollection",
         "features": geojson_features,
@@ -281,7 +296,9 @@ def extract_features(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Extract spatial, operational, and track segregation tram features.")
+    parser = argparse.ArgumentParser(
+        description="Extract spatial, operational, and track segregation tram features."
+    )
     parser.add_argument(
         "--stops-path",
         type=Path,
@@ -297,7 +314,9 @@ def main() -> None:
     parser.add_argument(
         "--tramlanes-path",
         type=Path,
-        default=Path("tramlanes.geojson"),
+        default=Path("data/tramlanes.geojson")
+        if Path("data/tramlanes.geojson").is_file()
+        else Path("tramlanes.geojson"),
         help="Path to tramlanes.geojson file.",
     )
     parser.add_argument(
@@ -308,7 +327,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    extract_features(args.stops_path, args.actual_path, args.output_dir, tramlanes_path=args.tramlanes_path)
+    extract_features(
+        args.stops_path, args.actual_path, args.output_dir, tramlanes_path=args.tramlanes_path
+    )
 
 
 if __name__ == "__main__":

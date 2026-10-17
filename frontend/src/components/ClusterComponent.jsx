@@ -18,7 +18,12 @@ export const ClusterComponent = ({ data, setPopUpData }) => {
       setZoom(mapref.getZoom());
       const bounds = mapref.getBounds();
       if (bounds) {
-          setBbox([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+        setBbox([
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth(),
+        ]);
       }
     };
     mapref.on("move", update);
@@ -41,7 +46,7 @@ export const ClusterComponent = ({ data, setPopUpData }) => {
         },
         properties: {
           id: item.id,
-          name: item.name
+          name: item.name,
         },
       }));
   }, [data]);

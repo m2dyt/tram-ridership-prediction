@@ -16,3 +16,4 @@ App управляет подключением, выбранной сетью/�
 - [components](components/README.md).
 - [domain](domain/README.md).
 - [features](features/README.md).
+- [pages](pages/README.md).

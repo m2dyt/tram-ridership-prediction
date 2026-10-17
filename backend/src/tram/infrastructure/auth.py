@@ -1,12 +1,12 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+
 import jwt
 from argon2 import PasswordHasher as Argon2Hasher
 from argon2.exceptions import VerifyMismatchError
-from sqlalchemy import select, update, delete
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
 
 from tram.application.ports import Document
-from tram.infrastructure.database import UserRow, RefreshTokenRow
+from tram.infrastructure.database import RefreshTokenRow, UserRow
 
 
 class SqlUserRepository:
@@ -28,23 +28,26 @@ class SqlUserRepository:
                 "created_at": user.created_at,
             }
 
-
     def create(self, user_id: str, username: str, password_hash: str, role: str) -> None:
+        from datetime import datetime
+
         import sqlalchemy.exc
-        from datetime import datetime, timezone
+
         with self.session_factory() as session:
             try:
-                session.add(UserRow(
-                    id=user_id,
-                    username=username,
-                    password_hash=password_hash,
-                    role=role,
-                    is_active=True,
-                    created_at=datetime.now(timezone.utc)
-                ))
+                session.add(
+                    UserRow(
+                        id=user_id,
+                        username=username,
+                        password_hash=password_hash,
+                        role=role,
+                        is_active=True,
+                        created_at=datetime.now(UTC),
+                    )
+                )
                 session.commit()
             except sqlalchemy.exc.IntegrityError as e:
-                raise ValueError(f"User already exists or DB constraint failed: {e}")
+                raise ValueError(f"User already exists or DB constraint failed: {e}") from e
 
     def get_by_id(self, user_id: str) -> Document | None:
         with self.session_factory() as session:
@@ -80,8 +83,9 @@ class JwtTokenIssuer:
     def __init__(self, secret: str):
         self.secret = secret
 
-    def issue_access_token(self, user_id: str, role: str, now: datetime, ttl_seconds: int) -> tuple[str, datetime]:
-        import time
+    def issue_access_token(
+        self, user_id: str, role: str, now: datetime, ttl_seconds: int
+    ) -> tuple[str, datetime]:
         expires_at = now.timestamp() + ttl_seconds
         payload = {
             "sub": user_id,
@@ -95,7 +99,9 @@ class JwtTokenIssuer:
 
     def verify_access_token(self, token: str, now: datetime) -> Document | None:
         try:
-            payload = jwt.decode(token, self.secret, algorithms=["HS256"], options={"verify_exp": False})
+            payload = jwt.decode(
+                token, self.secret, algorithms=["HS256"], options={"verify_exp": False}
+            )
             if payload.get("exp", 0) < now.timestamp():
                 return None
             return {"user_id": payload.get("sub"), "role": payload.get("role")}
@@ -107,8 +113,11 @@ class SqlSessionStore:
     def __init__(self, session_factory):
         self.session_factory = session_factory
 
-    def create_session(self, user_id: str, token_hash: str, now: datetime, expires_at: datetime) -> None:
+    def create_session(
+        self, user_id: str, token_hash: str, now: datetime, expires_at: datetime
+    ) -> None:
         import uuid
+
         with self.session_factory() as session:
             row = RefreshTokenRow(
                 id=str(uuid.uuid4()),
@@ -127,7 +136,7 @@ class SqlSessionStore:
             stmt = select(RefreshTokenRow).where(
                 RefreshTokenRow.token_hash == token_hash,
                 RefreshTokenRow.revoked_at.is_(None),
-                RefreshTokenRow.expires_at > now
+                RefreshTokenRow.expires_at > now,
             )
             row = session.scalars(stmt).first()
             if not row:
@@ -139,18 +148,21 @@ class SqlSessionStore:
                 "expires_at": row.expires_at,
             }
 
-    def rotate_session(self, old_hash: str, new_hash: str, now: datetime, expires_at: datetime) -> Document | None:
+    def rotate_session(
+        self, old_hash: str, new_hash: str, now: datetime, expires_at: datetime
+    ) -> Document | None:
         import uuid
+
         with self.session_factory() as session:
             stmt = select(RefreshTokenRow).where(
                 RefreshTokenRow.token_hash == old_hash,
                 RefreshTokenRow.revoked_at.is_(None),
-                RefreshTokenRow.expires_at > now
+                RefreshTokenRow.expires_at > now,
             )
             old_row = session.scalars(stmt).first()
             if not old_row:
                 return None
-            
+
             new_id = str(uuid.uuid4())
             new_row = RefreshTokenRow(
                 id=new_id,
@@ -163,12 +175,12 @@ class SqlSessionStore:
             )
             session.add(new_row)
             session.flush()
-            
+
             old_row.revoked_at = now
             old_row.replaced_by = new_id
-            
+
             session.commit()
-            
+
             return {
                 "id": new_id,
                 "user_id": new_row.user_id,
@@ -179,8 +191,7 @@ class SqlSessionStore:
     def revoke_session(self, token_hash: str, now: datetime) -> bool:
         with self.session_factory() as session:
             stmt = select(RefreshTokenRow).where(
-                RefreshTokenRow.token_hash == token_hash,
-                RefreshTokenRow.revoked_at.is_(None)
+                RefreshTokenRow.token_hash == token_hash, RefreshTokenRow.revoked_at.is_(None)
             )
             row = session.scalars(stmt).first()
             if not row:
@@ -191,9 +202,10 @@ class SqlSessionStore:
 
     def revoke_all_sessions(self, user_id: str, now: datetime) -> None:
         with self.session_factory() as session:
-            stmt = update(RefreshTokenRow).where(
-                RefreshTokenRow.user_id == user_id,
-                RefreshTokenRow.revoked_at.is_(None)
-            ).values(revoked_at=now)
+            stmt = (
+                update(RefreshTokenRow)
+                .where(RefreshTokenRow.user_id == user_id, RefreshTokenRow.revoked_at.is_(None))
+                .values(revoked_at=now)
+            )
             session.execute(stmt)
             session.commit()

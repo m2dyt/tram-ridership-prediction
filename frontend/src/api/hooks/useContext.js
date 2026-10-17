@@ -18,7 +18,8 @@ export function useContextSnapshot(snapshotId) {
   return useQuery({
     queryKey: ["context-snapshot", snapshotId],
     enabled: !!getToken() && !!snapshotId,
-    queryFn: () => fetchJson(`/context/snapshots/${encodeURIComponent(snapshotId)}`),
+    queryFn: () =>
+      fetchJson(`/context/snapshots/${encodeURIComponent(snapshotId)}`),
   });
 }
 
@@ -26,7 +27,8 @@ export function useContextSnapshotGeojson(snapshotId) {
   return useQuery({
     queryKey: ["context-snapshot-geojson", snapshotId],
     enabled: !!getToken() && !!snapshotId,
-    queryFn: () => fetchJson(`/context/snapshots/${encodeURIComponent(snapshotId)}/geojson`),
+    queryFn: () =>
+      fetchJson(`/context/snapshots/${encodeURIComponent(snapshotId)}/geojson`),
   });
 }
 

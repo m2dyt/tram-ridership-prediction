@@ -1,40 +1,47 @@
 @font-face {
-  font-family: 'MoscowSans';
-  src: url('/fonts/MoscowSans-Regular.otf') format('opentype');
+  font-family: "MoscowSans";
+  src: url("/fonts/MoscowSans-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
 }
 @font-face {
-  font-family: 'MoscowSans';
-  src: url('/fonts/MoscowSansExtraBold.otf') format('opentype');
+  font-family: "MoscowSans";
+  src: url("/fonts/MoscowSansExtraBold.otf") format("opentype");
   font-weight: 800;
   font-style: normal;
 }
 
 :root {
-  font-family: "MoscowSans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  
+  font-family:
+    "MoscowSans",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+
   /* Brandbook Mosgortrans & Moscow Transport official palette */
-  --mgt-blue: #0076BC;
-  --mgt-blue-hover: #00639E;
-  --mgt-blue-dark: #004F80;
-  --mgt-blue-light: #EBF5FA;
-  --mgt-blue-surface: #F0F7FB;
-  --mgt-red: #ED1C24;
-  --mgt-red-hover: #D3151D;
-  --mgt-cyan: #008DD1;
-  --mgt-dark: #1F2229;
-  --mgt-gray: #64748B;
-  --mgt-muted: #8E9EA4;
-  --mgt-bg: #F4F6F8;
-  --mgt-surface: #FFFFFF;
-  --mgt-border: #E2E8F0;
-  --mgt-border-subtle: #EDF2F7;
-  
+  --mgt-blue: #0076bc;
+  --mgt-blue-hover: #00639e;
+  --mgt-blue-dark: #004f80;
+  --mgt-blue-light: #ebf5fa;
+  --mgt-blue-surface: #f0f7fb;
+  --mgt-red: #ed1c24;
+  --mgt-red-hover: #d3151d;
+  --mgt-cyan: #008dd1;
+  --mgt-dark: #1f2229;
+  --mgt-gray: #64748b;
+  --mgt-muted: #8e9ea4;
+  --mgt-bg: #f4f6f8;
+  --mgt-surface: #ffffff;
+  --mgt-border: #e2e8f0;
+  --mgt-border-subtle: #edf2f7;
+
   /* Legacy mapping */
   --mt-red: var(--mgt-red);
   --mt-blue: var(--mgt-blue);
-  --mt-white: #FFFFFF;
+  --mt-white: #ffffff;
   --mt-dark: var(--mgt-dark);
   --mt-light: var(--mgt-bg);
   --border-color: var(--mgt-border);
@@ -57,11 +64,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button, input, select {
+button,
+input,
+select {
   font-family: inherit;
 }
 
-button, a, input, select, summary {
+button,
+a,
+input,
+select,
+summary {
   outline-offset: 3px;
 }
 
@@ -110,7 +123,10 @@ a:hover {
   text-decoration: underline;
 }
 
-h1, h2, h3, p {
+h1,
+h2,
+h3,
+p {
   margin-top: 0;
 }
 
@@ -152,7 +168,8 @@ label {
   min-width: 0;
 }
 
-input, select {
+input,
+select {
   width: 100%;
   border: 1px solid var(--mgt-border);
   border-radius: 8px;
@@ -160,10 +177,13 @@ input, select {
   background: #ffffff;
   color: var(--mgt-dark);
   min-width: 0;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-input:focus, select:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--mgt-blue);
   box-shadow: 0 0 0 3px rgba(0, 118, 188, 0.15);
@@ -199,7 +219,7 @@ input:disabled {
 /* Brand Card with Mosgortrans Pattern */
 .mgt-brand-card {
   position: relative;
-  background: linear-gradient(135deg, #004d7a 0%, #0076BC 100%);
+  background: linear-gradient(135deg, #004d7a 0%, #0076bc 100%);
   border-radius: 12px;
   padding: 16px 16px 14px;
   margin-bottom: 20px;
@@ -220,13 +240,15 @@ input:disabled {
   transform: translateY(-50%);
   width: 175px;
   height: 66px;
-  background-image: url('/mgt_uzor_white.svg');
+  background-image: url("/mgt_uzor_white.svg");
   background-repeat: no-repeat;
   background-position: right center;
   background-size: contain;
   opacity: 0.42;
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .mgt-brand-card:hover::after {
@@ -361,7 +383,8 @@ main {
 /* =========================================================
    Main Header & Meta
    ========================================================= */
-header.main-header, header {
+header.main-header,
+header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -373,7 +396,7 @@ header.main-header, header {
 .mgt-uzor-header-strip {
   height: 18px;
   width: 100%;
-  background-image: url('/mgt_uzor_blue.svg');
+  background-image: url("/mgt_uzor_blue.svg");
   background-repeat: repeat-x;
   background-size: auto 18px;
   background-position: left center;
@@ -386,7 +409,7 @@ header.main-header, header {
 /* Mosgortrans Hero Banner for Analytical Pages */
 .mgt-page-hero {
   position: relative;
-  background: linear-gradient(135deg, #004d7a 0%, #0076BC 100%);
+  background: linear-gradient(135deg, #004d7a 0%, #0076bc 100%);
   color: #ffffff;
   border-radius: 14px;
   padding: 20px 24px;
@@ -407,7 +430,7 @@ header.main-header, header {
   transform: translateY(-50%);
   width: 320px;
   height: 68px;
-  background-image: url('/mgt_uzor_white.svg');
+  background-image: url("/mgt_uzor_white.svg");
   background-repeat: no-repeat;
   background-position: right center;
   background-size: contain;
@@ -503,11 +526,11 @@ header.main-header, header {
   transform: translateY(-50%);
   width: 220px;
   height: 38px;
-  background-image: url('/mgt_uzor_blue.svg');
+  background-image: url("/mgt_uzor_blue.svg");
   background-repeat: no-repeat;
   background-position: right center;
   background-size: contain;
-  opacity: 0.10;
+  opacity: 0.1;
   pointer-events: none;
 }
 
@@ -663,8 +686,11 @@ header.main-header, header {
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .stat:hover {
@@ -683,13 +709,15 @@ header.main-header, header {
   transform: translateY(-50%);
   width: 145px;
   height: 52px;
-  background-image: url('/mgt_uzor_blue.svg');
+  background-image: url("/mgt_uzor_blue.svg");
   background-repeat: no-repeat;
   background-position: right center;
   background-size: contain;
   opacity: 0.15;
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .stat:hover::after {
@@ -704,7 +732,8 @@ header.main-header, header {
   margin-bottom: 8px;
 }
 
-.stat-label, .stat > span {
+.stat-label,
+.stat > span {
   font-size: 11px;
   color: var(--mgt-gray);
   font-weight: 700;
@@ -719,7 +748,8 @@ header.main-header, header {
   opacity: 0.75;
 }
 
-.stat-value, .stat strong {
+.stat-value,
+.stat strong {
   font-size: 30px;
   letter-spacing: -0.5px;
   color: var(--mgt-blue);
@@ -727,7 +757,8 @@ header.main-header, header {
   line-height: 1.25;
 }
 
-.stat-value.word-stat, .stat strong.word-stat {
+.stat-value.word-stat,
+.stat strong.word-stat {
   font-size: 18px;
   line-height: 1.4;
   letter-spacing: -0.3px;
@@ -748,7 +779,7 @@ header.main-header, header {
   background: white;
   padding: 24px;
   margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 /* =========================================================
@@ -961,7 +992,9 @@ table tr:hover td {
   border: none !important;
   outline: none !important;
   cursor: pointer !important;
-  transition: color 0.15s, background-color 0.15s !important;
+  transition:
+    color 0.15s,
+    background-color 0.15s !important;
 }
 
 .maplibregl-popup-close-button:hover {
@@ -1009,7 +1042,7 @@ table tr:hover td {
 
 .login-art {
   position: relative;
-  background: linear-gradient(145deg, #004d7a 0%, #0076BC 100%);
+  background: linear-gradient(145deg, #004d7a 0%, #0076bc 100%);
   color: #ffffff;
   padding: 44px 38px;
   display: flex;
@@ -1021,7 +1054,7 @@ table tr:hover td {
 .login-art-uzor {
   position: absolute;
   inset: 0;
-  background-image: url('/mgt_uzor_white.svg');
+  background-image: url("/mgt_uzor_white.svg");
   background-repeat: repeat-y;
   background-position: right top;
   background-size: 320px auto;

@@ -90,6 +90,20 @@ class TramModelBundle:
         if self.base_col not in df_feat.columns:
             df_feat = attach_historical_profiles(df_feat, self.profiles)
 
+        # 3. Attach weather features if used by model
+        from ml.training.tram.features import ROUTE_STATIC_FEATURE_COLS, WEATHER_FEATURE_COLS
+
+        if any(c in self.feature_cols for c in WEATHER_FEATURE_COLS):
+            from ml.training.tram.features import attach_weather_features
+
+            df_feat = attach_weather_features(df_feat)
+
+        # 4. Attach route spatial/operational features if used by model
+        if any(c in self.feature_cols for c in ROUTE_STATIC_FEATURE_COLS):
+            from ml.training.tram.features import attach_route_features
+
+            df_feat = attach_route_features(df_feat)
+
         base_vals = df_feat[self.base_col].values
         active_features = [c for c in self.feature_cols if c in df_feat.columns]
         active_route_features = [c for c in active_features if c != "route"]

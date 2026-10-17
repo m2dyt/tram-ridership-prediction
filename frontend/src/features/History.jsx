@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Chart from "../components/Chart.jsx";
-import {
-  Download,
-  Empty,
-  ErrorBox,
-  Loading,
-} from "../components/Common.jsx";
+import { Download, Empty, ErrorBox, Loading } from "../components/Common.jsx";
 import {
   localInput,
   moscowTime,
@@ -39,7 +34,7 @@ export default function History({ caps, route }) {
   const result = {
     data: resultQuery.data,
     loading: resultQuery.isLoading,
-    error: resultQuery.error
+    error: resultQuery.error,
   };
   const keys = [...new Set((result.data || []).map(seriesKey))];
   const points = (result.data || []).filter(

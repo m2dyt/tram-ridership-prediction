@@ -15,7 +15,7 @@ export default function Fleet() {
   const [result, setResult] = useState(null),
     [error, setError] = useState(null),
     [busy, setBusy] = useState(false);
-  
+
   const calculateScenarioMutation = useCalculateFleetScenario();
 
   const fields = [

@@ -265,7 +265,14 @@ def test_model_registry_rejects_unsafe_directory(api, models_root, tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     models_root.mkdir()
-    (models_root / "linked_v1").symlink_to(outside, target_is_directory=True)
+    try:
+        (models_root / "linked_v1").symlink_to(outside, target_is_directory=True)
+    except OSError as e:
+        if getattr(e, "winerror", None) == 1314:
+            pytest.skip(
+                "Symlink creation requires administrative privilege or Developer Mode on Windows"
+            )
+        raise
     item = checked(api, "GET", "/models").json()["items"][0]
     assert item["id"] == "linked_v1"
     assert item["status"] == "invalid"
@@ -315,7 +322,14 @@ def test_model_registry_keeps_healthy_bundle_visible_with_bad_active_pointer(
     outside.write_text("secret", encoding="utf-8")
     pointer = models_root / "active_version.txt"
     if pointer_kind == "symlink":
-        pointer.symlink_to(outside)
+        try:
+            pointer.symlink_to(outside)
+        except OSError as e:
+            if getattr(e, "winerror", None) == 1314:
+                pytest.skip(
+                    "Symlink creation requires administrative privilege or Developer Mode on Windows"
+                )
+            raise
     elif pointer_kind == "empty":
         pointer.write_text("", encoding="utf-8")
     else:

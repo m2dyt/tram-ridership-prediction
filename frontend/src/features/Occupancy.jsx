@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import Fleet from "./Fleet.jsx";
 import ForecastLoad from "./ForecastLoad.jsx";
+import { Badge, Empty, ErrorBox, Loading } from "../components/Common.jsx";
 import {
-  Badge,
-  Empty,
-  ErrorBox,
-  Loading,
-} from "../components/Common.jsx";
-import { useOccupancyTrips, useOccupancyEvents, useCreateOccupancyTrip, useApplyOccupancyEvent } from "../api/hooks";
+  useOccupancyTrips,
+  useOccupancyEvents,
+  useCreateOccupancyTrip,
+  useApplyOccupancyEvent,
+} from "../api/hooks";
 import {
   date,
   localInput,
@@ -20,12 +20,12 @@ export default function Occupancy({ caps, route }) {
   const [id, setId] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  
+
   const listQuery = useOccupancyTrips();
   const list = {
     data: listQuery.data,
     loading: listQuery.isLoading,
-    error: listQuery.error
+    error: listQuery.error,
   };
   const trips = (list.data || []).filter(
     (t) =>
@@ -33,12 +33,12 @@ export default function Occupancy({ caps, route }) {
       t.plan.route_id === route.route.id,
   );
   const selected = trips.find((t) => t.id === id) || trips[0];
-  
+
   const eventsQuery = useOccupancyEvents(selected?.id);
   const events = {
     data: eventsQuery.data,
     loading: eventsQuery.isLoading,
-    error: eventsQuery.error
+    error: eventsQuery.error,
   };
   const [direction, setDirection] = useState(route.directions[0]?.id),
     [strategy, setStrategy] = useState("uniform"),
@@ -197,10 +197,7 @@ export default function Occupancy({ caps, route }) {
               ))}
             </select>
           </label>
-          <button
-            className="secondary"
-            onClick={() => listQuery.refetch()}
-          >
+          <button className="secondary" onClick={() => listQuery.refetch()}>
             Обновить
           </button>
         </div>
@@ -211,7 +208,10 @@ export default function Occupancy({ caps, route }) {
             key={selected.id + ":" + selected.state.version}
             trip={selected}
             events={events}
-            onUpdate={() => { listQuery.refetch(); eventsQuery.refetch(); }}
+            onUpdate={() => {
+              listQuery.refetch();
+              eventsQuery.refetch();
+            }}
           />
         ) : (
           <Empty>Для маршрута пока нет рейсов.</Empty>

@@ -17,7 +17,7 @@ This directory contains two separate forecasting paths. The tram competition scr
 
 ## Use this directory carefully
 
-1. Start from the [project's global plan](../../00_ГЛОБАЛЬНЫЙ_ПЛАН_К_ЭТАЛОНУ.md).
+1. Start from the [project roadmap](../../docs/ROADMAP.md) and [ML pipeline guide](../../docs/ML_PIPELINE.md).
 2. Keep original datasets and source metadata in `sources/`; put normalized/versioned data and split reports under `data/`. Both data areas may be ignored by Git.
 3. Do not tune on the final test period. Save each experiment's input hashes, config, split boundaries, predictions, metrics and candidate ID.
 4. Keep model training outside FastAPI/worker startup and HTTP requests. Backend integration goes through the `Predictor` port after model artifact review.

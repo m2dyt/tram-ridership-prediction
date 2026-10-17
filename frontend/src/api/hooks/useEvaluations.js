@@ -17,7 +17,8 @@ export function useEvaluation(evaluationId) {
   return useQuery({
     queryKey: ["evaluation", evaluationId],
     enabled: !!getToken() && !!evaluationId,
-    queryFn: () => fetchJson(`/evaluations/${encodeURIComponent(evaluationId)}`),
+    queryFn: () =>
+      fetchJson(`/evaluations/${encodeURIComponent(evaluationId)}`),
   });
 }
 
@@ -26,7 +27,10 @@ export function useEvaluationPoints(evaluationId, params = {}) {
     queryKey: ["evaluation-points", evaluationId, params],
     enabled: !!getToken() && !!evaluationId,
     queryFn: async () => {
-      const data = await fetchJson(`/evaluations/${encodeURIComponent(evaluationId)}/points`, { ...params, limit: 1000 });
+      const data = await fetchJson(
+        `/evaluations/${encodeURIComponent(evaluationId)}/points`,
+        { ...params, limit: 1000 },
+      );
       return data.items || [];
     },
   });

@@ -84,33 +84,56 @@ export function ExternalLink({ url, children }) {
 
 export function Freshness({ revision }) {
   const statusQuery = useDataStatus();
-  
+
   if (statusQuery.isError) return <ErrorBox error={statusQuery.error} />;
   if (!statusQuery.data || !statusQuery.data.sources) return null;
   const status = { data: statusQuery.data };
   return (
     <details className="freshness-details">
       <summary className="freshness-summary">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span className="freshness-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
           </span>
-          <span style={{ fontWeight: '600', color: '#1e293b' }}>Свежесть источников данных</span>
-          <span className="freshness-time">проверено {date(status.data.checked_at)}</span>
+          <span style={{ fontWeight: "600", color: "#1e293b" }}>
+            Свежесть источников данных
+          </span>
+          <span className="freshness-time">
+            проверено {date(status.data.checked_at)}
+          </span>
         </div>
-        <svg className="freshness-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          className="freshness-chevron"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </summary>
-      
+
       <div className="freshness-body">
         {status.data.dataset_revision_id !== revision ? (
           <p className="notice" style={{ margin: 0 }}>
-            Опубликована другая версия данных. Перезагрузите страницу для перехода
-            на неё; текущая выборка остаётся закреплённой.
+            Опубликована другая версия данных. Перезагрузите страницу для
+            перехода на неё; текущая выборка остаётся закреплённой.
           </p>
         ) : (
           <div className="table-scroll">
@@ -126,19 +149,17 @@ export function Freshness({ revision }) {
               <tbody>
                 {status.data.sources.map((s) => (
                   <tr key={s.source}>
-                    <td style={{ fontWeight: '600' }}>{s.source}</td>
+                    <td style={{ fontWeight: "600" }}>{s.source}</td>
                     <td>{date(s.event_watermark)}</td>
                     <td>{date(s.ingested_at)}</td>
                     <td>
                       <span className={`status-pill status-${s.freshness}`}>
                         <span className="status-dot"></span>
-                        {
-                          {
-                            fresh: "Актуально",
-                            stale: "Устарело",
-                            unknown: "Не определена",
-                          }[s.freshness] || s.freshness
-                        }
+                        {{
+                          fresh: "Актуально",
+                          stale: "Устарело",
+                          unknown: "Не определена",
+                        }[s.freshness] || s.freshness}
                       </span>
                     </td>
                   </tr>

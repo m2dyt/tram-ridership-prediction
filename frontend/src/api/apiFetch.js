@@ -6,7 +6,7 @@ let refreshPromise = null;
 
 export function refreshSession() {
   if (refreshPromise) return refreshPromise;
-  
+
   refreshPromise = (async () => {
     try {
       const res = await fetch(`${BASE}/auth/refresh`, {
@@ -38,11 +38,18 @@ export async function apiFetch(path, options = {}) {
     headers,
   });
 
-  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/refresh") {
+  if (
+    res.status === 401 &&
+    path !== "/auth/login" &&
+    path !== "/auth/refresh"
+  ) {
     try {
       const newToken = await refreshSession();
       const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
-      res = await fetch(`${BASE}${path}`, { ...options, headers: retryHeaders });
+      res = await fetch(`${BASE}${path}`, {
+        ...options,
+        headers: retryHeaders,
+      });
     } catch (error) {
       updateToken(null);
       throw new Error("Сессия истекла");

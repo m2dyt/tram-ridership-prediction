@@ -7,7 +7,11 @@ import {
   ExternalLink,
   Loading,
 } from "../components/Common.jsx";
-import { useContextSnapshots, useContextSnapshot, useRefreshContext } from "../api/hooks";
+import {
+  useContextSnapshots,
+  useContextSnapshot,
+  useRefreshContext,
+} from "../api/hooks";
 import { date, number, statusName } from "../domain/format.js";
 
 export default function Context({ route }) {
@@ -15,23 +19,23 @@ export default function Context({ route }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(null),
     [id, setId] = useState("");
-    
+
   const listQuery = useContextSnapshots();
   const list = {
     data: listQuery.data,
     loading: listQuery.isLoading,
-    error: listQuery.error
+    error: listQuery.error,
   };
 
   const selected = id || list.data?.[0]?.id;
-  
+
   const detailQuery = useContextSnapshot(selected);
   const detail = {
     data: detailQuery.data,
     loading: detailQuery.isLoading,
-    error: detailQuery.error
+    error: detailQuery.error,
   };
-  
+
   const refreshMutation = useRefreshContext();
   async function refresh() {
     setBusy(true);

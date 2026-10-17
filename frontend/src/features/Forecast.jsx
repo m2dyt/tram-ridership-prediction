@@ -6,11 +6,11 @@ import {
   ErrorBox,
   Loading,
 } from "../components/Common.jsx";
-import { 
-  useForecastRuns, 
-  useForecastRun, 
-  useCreateForecastRun, 
-  useForecastPoints, 
+import {
+  useForecastRuns,
+  useForecastRun,
+  useCreateForecastRun,
+  useForecastPoints,
   useForecastMap,
   useHealth,
 } from "../api/hooks";
@@ -41,31 +41,35 @@ export default function Forecast({ caps, route }) {
     [runId, setRunId] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(null);
-    
+
   useEffect(() => {
     setStart(localInput(profile?.forecast_start_min));
     setAsOf(localInput(profile?.allowed_as_of_end));
     setRunId("");
   }, [profile?.id]);
 
-  const runsQuery = useForecastRuns(profile ? {
-    dataset_revision_id: caps.dataset_revision_id,
-    profile_id: profile.id,
-    route_id: route.route.id,
-  } : {});
+  const runsQuery = useForecastRuns(
+    profile
+      ? {
+          dataset_revision_id: caps.dataset_revision_id,
+          profile_id: profile.id,
+          route_id: route.route.id,
+        }
+      : {},
+  );
   const runs = {
     data: runsQuery.data,
     loading: runsQuery.isLoading,
-    error: runsQuery.error
+    error: runsQuery.error,
   };
 
   const selectedId = runId || runs.data?.[0]?.id;
-  
+
   const runQuery = useForecastRun(selectedId);
   const run = {
     data: runQuery.data,
     loading: runQuery.isLoading,
-    error: runQuery.error
+    error: runQuery.error,
   };
 
   const createMutation = useCreateForecastRun();
@@ -209,7 +213,7 @@ export default function Forecast({ caps, route }) {
 function Result({ run, route }) {
   const [index, setIndex] = useState(0),
     [series, setSeries] = useState("");
-    
+
   const resultQuery = useForecastPoints(run.id, {
     from: run.forecast_start,
     to: run.forecast_end,
@@ -218,34 +222,41 @@ function Result({ run, route }) {
   const result = {
     data: resultQuery.data,
     loading: resultQuery.isLoading,
-    error: resultQuery.error
+    error: resultQuery.error,
   };
 
   const keys = [...new Set((result.data || []).map(seriesKey))];
   const selected = series || keys[0];
   const points = (result.data || []).filter((p) => seriesKey(p) === selected);
   const at = points[index]?.interval_start;
-  
-  const mapParams = at && points[0]?.spatial ? {
-    ...Object.fromEntries(
-      Object.entries(points[0].spatial).filter(([key]) => key !== "level")
-    ),
-    interval_start: at,
-  } : null;
-  
+
+  const mapParams =
+    at && points[0]?.spatial
+      ? {
+          ...Object.fromEntries(
+            Object.entries(points[0].spatial).filter(
+              ([key]) => key !== "level",
+            ),
+          ),
+          interval_start: at,
+        }
+      : null;
+
   const mapQuery = useForecastMap(run.id, mapParams || {});
-  
-  const mapData = mapQuery.data ? {
-    type: "FeatureCollection",
-    features: (mapQuery.data.features || []).filter(
-      (f) => seriesKey(f.properties) === selected,
-    ),
-  } : null;
-  
+
+  const mapData = mapQuery.data
+    ? {
+        type: "FeatureCollection",
+        features: (mapQuery.data.features || []).filter(
+          (f) => seriesKey(f.properties) === selected,
+        ),
+      }
+    : null;
+
   const map = {
     data: mapData,
     loading: mapQuery.isLoading,
-    error: mapQuery.error
+    error: mapQuery.error,
   };
   const values = points.map((p) => p.value).filter((v) => v != null);
   const max = values.length ? Math.max(...values) : null;
