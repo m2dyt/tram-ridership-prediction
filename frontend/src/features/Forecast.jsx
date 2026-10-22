@@ -278,8 +278,25 @@ function Result({ run, route }) {
         </div>
         <div className="stat">
           <span>Метод</span>
-          <strong className="word-stat">Сезонная база</strong>
-          <small>Версия {run.model.version} · обучение не требуется</small>
+          {run.model.method === "tram_bundle" ? (
+            <>
+              <strong className="word-stat">Обученная модель</strong>
+              <small>
+                Версия {run.model.version} · данные для обучения до{" "}
+                {new Intl.DateTimeFormat("ru-RU", {
+                  timeZone: "Europe/Moscow",
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                }).format(new Date(run.model.training_history_end))}
+              </small>
+            </>
+          ) : (
+            <>
+              <strong className="word-stat">Сезонная база</strong>
+              <small>Версия {run.model.version} · обучение не требуется</small>
+            </>
+          )}
         </div>
       </div>
       <section className="panel">
