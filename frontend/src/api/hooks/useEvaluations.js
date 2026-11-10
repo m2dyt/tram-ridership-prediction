@@ -1,15 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchJson } from "./_utils";
 import { getToken } from "../tokenBus";
+import { fetchPages } from "../observationPages.js";
 
 export function useEvaluations(params = {}) {
   return useQuery({
     queryKey: ["evaluations", params],
     enabled: !!getToken(),
-    queryFn: async () => {
-      const data = await fetchJson("/evaluations", params);
-      return data.items || [];
-    },
+    queryFn: () => fetchPages(fetchJson, "/evaluations", params),
   });
 }
 
@@ -26,12 +24,11 @@ export function useEvaluationPoints(evaluationId, params = {}) {
   return useQuery({
     queryKey: ["evaluation-points", evaluationId, params],
     enabled: !!getToken() && !!evaluationId,
-    queryFn: async () => {
-      const data = await fetchJson(
+    queryFn: () =>
+      fetchPages(
+        fetchJson,
         `/evaluations/${encodeURIComponent(evaluationId)}/points`,
-        { ...params, limit: 1000 },
-      );
-      return data.items || [];
-    },
+        params,
+      ),
   });
 }

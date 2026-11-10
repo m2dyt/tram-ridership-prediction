@@ -121,5 +121,21 @@ def test_built_frontend_is_served_without_hiding_api(tmp_path, monkeypatch):
         monkeypatch.setenv(name, value)
     with TestClient(create_app()) as client:
         assert "Tram frontend" in client.get("/").text
+        for path in (
+            "/dashboard",
+            "/forecast",
+            "/history",
+            "/evaluations",
+            "/occupancy",
+            "/context",
+            "/models",
+        ):
+            response = client.get(path)
+            assert response.status_code == 200, path
+            assert "Tram frontend" in response.text
+            assert response.headers["content-type"].startswith("text/html")
+        assert client.get("/api/v1/unknown").status_code == 404
+        assert client.get("/assets/unknown.js").status_code == 404
+        assert client.get("/unknown-page").status_code == 404
         assert client.get("/docs").status_code == 200
         assert "/scenarios/fleet" in client.get("/openapi.json").json()["paths"]

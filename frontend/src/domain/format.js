@@ -48,15 +48,17 @@ export function csvCell(value) {
   if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"', '""') + '"';
 }
-export function exportCsv(points) {
-  const keys = [
+export function exportCsv(
+  points,
+  keys = [
     "interval_start",
     "interval_end",
     "value",
     "actual",
     "model",
     "missing_reason",
-  ];
+  ],
+) {
   return (
     "\uFEFF" +
     [

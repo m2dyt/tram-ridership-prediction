@@ -8,6 +8,8 @@ import {
   unitName,
 } from "../domain/format.js";
 import { useObservations } from "../api/hooks";
+import { levelName, spatialLabel } from "../domain/aggregate.js";
+import { initialHistoryWindow } from "../domain/historyWindow.js";
 
 export default function History({ caps, route }) {
   const profiles = caps.observation_profiles.filter((p) =>
@@ -21,12 +23,9 @@ export default function History({ caps, route }) {
   const profile = profiles.find((p) => p.id === id) || profiles[0];
   useEffect(() => {
     if (!profile) return;
-    const end = new Date(profile.history_end),
-      start = new Date(profile.history_start);
-    if ((end - start) / 86400000 > 366)
-      start.setUTCFullYear(end.getUTCFullYear() - 1);
-    setFrom(localInput(start.toISOString()));
-    setTo(localInput(end.toISOString()));
+    const window = initialHistoryWindow(profile);
+    setFrom(localInput(window.from));
+    setTo(localInput(window.to));
     setQuery(null);
     setSeries("");
   }, [profile?.id]);
@@ -69,7 +68,11 @@ export default function History({ caps, route }) {
           <select value={profile.id} onChange={(e) => setId(e.target.value)}>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
-                {unitName(p.metric)} · {p.resolution}
+                {unitName(p.metric)} ·{" "}
+                {{ hour: "по часам", day: "по дням", month: "по месяцам" }[
+                  p.resolution
+                ] || p.resolution}
+                {levelName(p.spatial_level)}
               </option>
             ))}
           </select>
@@ -107,7 +110,9 @@ export default function History({ caps, route }) {
                 onChange={(e) => setSeries(e.target.value)}
               >
                 {keys.map((k) => (
-                  <option key={k}>{k}</option>
+                  <option key={k} value={k}>
+                    {spatialLabel(JSON.parse(k), route)}
+                  </option>
                 ))}
               </select>
             </label>

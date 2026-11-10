@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchJson } from "./_utils";
 import { getToken } from "../tokenBus";
+import { fetchObservationPages } from "../observationPages.js";
 
 export function useObservations(params) {
   return useQuery({
@@ -11,9 +12,6 @@ export function useObservations(params) {
       !!params?.observation_profile_id &&
       !!params?.from &&
       !!params?.to,
-    queryFn: async () => {
-      const data = await fetchJson("/observations", { ...params, limit: 1000 });
-      return data.items || [];
-    },
+    queryFn: () => fetchObservationPages(fetchJson, params),
   });
 }

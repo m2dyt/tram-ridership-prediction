@@ -2,6 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchJson } from "./_utils";
 import { apiFetch } from "../apiFetch";
 import { getToken } from "../tokenBus";
+import { fetchPages } from "../observationPages.js";
 
 export function useCreateForecastRun() {
   return useMutation({
@@ -20,10 +21,7 @@ export function useForecastRuns(params = {}) {
   return useQuery({
     queryKey: ["forecast-runs", params],
     enabled: !!getToken(),
-    queryFn: async () => {
-      const data = await fetchJson("/forecast-runs", params);
-      return data.items || [];
-    },
+    queryFn: () => fetchPages(fetchJson, "/forecast-runs", params),
   });
 }
 

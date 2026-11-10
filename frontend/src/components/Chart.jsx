@@ -8,6 +8,7 @@ export default function Chart({
   selected = 0,
   onSelect,
   unit,
+  fieldLabels = {},
 }) {
   if (!points.length) return <Empty />;
   const max =
@@ -96,11 +97,12 @@ export default function Chart({
                 <th>Москва, UTC+3</th>
                 {fields.map((f) => (
                   <th key={f}>
-                    {f === "actual"
-                      ? "Факт"
-                      : f === "model"
-                        ? "Сезонная база"
-                        : unit}
+                    {fieldLabels[f] ||
+                      (f === "actual"
+                        ? "Факт"
+                        : f === "model"
+                          ? "Прогноз модели"
+                          : unit)}
                   </th>
                 ))}
               </tr>
