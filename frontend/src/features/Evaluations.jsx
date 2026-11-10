@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { explainForecastText } from "../domain/forecast.js";
 import Chart from "../components/Chart.jsx";
 import {
   Badge,
@@ -19,8 +20,17 @@ import {
   seriesKey,
   unitName,
 } from "../domain/format.js";
+import { spatialLabel } from "../domain/aggregate.js";
+import {
+  evaluationModelLabel,
+  evaluationStatusLabel,
+} from "../domain/evaluation.js";
+import {
+  evaluationScoreRows,
+  peakRuleLabel,
+} from "../domain/evaluationScores.js";
 
-export default function Evaluations({ caps }) {
+export default function Evaluations({ caps, route }) {
   const listQuery = useEvaluations({
     dataset_revision_id: caps.dataset_revision_id,
   });
@@ -46,7 +56,9 @@ export default function Evaluations({ caps }) {
           <p className="eyebrow">ПРОВЕРКА НА ПРОШЛЫХ ПЕРИОДАХ</p>
           <h2>Качество прогноза</h2>
         </div>
-        <Badge>Без обучения</Badge>
+        {report.data && (
+          <Badge>{evaluationStatusLabel(report.data.summary.status)}</Badge>
+        )}
       </div>
       <ErrorBox error={list.error || report.error} />
       {list.loading ? (
@@ -64,7 +76,10 @@ export default function Evaluations({ caps }) {
               ))}
             </select>
           </label>
-          {report.data && <Report key={selected} report={report.data} />}
+          {report.loading && <Loading />}
+          {report.data && (
+            <Report key={selected} report={report.data} route={route} />
+          )}
         </>
       ) : (
         <Empty>
@@ -75,7 +90,7 @@ export default function Evaluations({ caps }) {
     </section>
   );
 }
-function Report({ report }) {
+function Report({ report, route }) {
   const [foldId, setFoldId] = useState(report.folds[0]?.id),
     [series, setSeries] = useState("");
   const fold = report.folds.find((f) => f.id === foldId);
@@ -102,13 +117,36 @@ function Report({ report }) {
   return (
     <>
       <p className="notice">
-        Сейчас оценивается сезонная база. Значения model и seasonal_naive
-        совпадают. Точность обученной модели ещё не измерялась.
+        {evaluationStatusLabel(report.summary.status)}. Проверялась:{" "}
+        {evaluationModelLabel(report.summary.model)}. Завершённая проверка сама
+        по себе не означает, что модель точнее базового метода.
       </p>
+      {report.summary.limitations?.length > 0 && (
+        <div className="muted">
+          <strong>Ограничения отчёта</strong>
+          <ul>
+            {report.summary.limitations.map((item, i) => (
+              <li key={i}>{explainForecastText(item)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {report.warnings?.length > 0 && (
+        <div className="muted">
+          <strong>Условия расчёта</strong>
+          <ul>
+            {report.warnings.map((item, i) => (
+              <li key={i}>{explainForecastText(item)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
+              <th>Метод</th>
+              <th>Маршрут</th>
               <th>Срез</th>
               <th>MAE</th>
               <th>WAPE</th>
@@ -116,24 +154,22 @@ function Report({ report }) {
             </tr>
           </thead>
           <tbody>
-            {report.scores
-              .filter((s) => s.method === "model" && s.route_id === null)
-              .map((s) => (
-                <tr key={s.demand_slice}>
-                  <td>
-                    {s.demand_slice === "all" ? "Все интервалы" : "Часы пик"}
-                  </td>
-                  <td>{number(s.mae)}</td>
-                  <td>
-                    {s.wape == null
-                      ? "Нет данных"
-                      : number(s.wape * 100) + " %"}
-                  </td>
-                  <td>
-                    {s.sample_count} / {s.excluded_count}
-                  </td>
-                </tr>
-              ))}
+            {evaluationScoreRows(report.scores, route).map((s) => (
+              <tr key={`${s.method}-${s.route_id || "all"}-${s.demand_slice}`}>
+                <td>{s.methodLabel}</td>
+                <td>{s.routeLabel}</td>
+                <td>{s.sliceLabel}</td>
+                <td>{number(s.mae)}</td>
+                <td>
+                  {s.wape == null
+                    ? s.wape_unavailable_reason || "Нет данных"
+                    : number(s.wape * 100) + " %"}
+                </td>
+                <td>
+                  {s.sample_count} / {s.excluded_count}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -166,7 +202,12 @@ function Report({ report }) {
             onChange={(e) => setSeries(e.target.value)}
           >
             {keys.map((k) => (
-              <option key={k}>{k}</option>
+              <option key={k} value={k}>
+                {spatialLabel(
+                  JSON.parse(k),
+                  JSON.parse(k).route_id === route?.route?.id ? route : null,
+                )}
+              </option>
             ))}
           </select>
         </label>
@@ -178,14 +219,17 @@ function Report({ report }) {
         <Chart
           points={points}
           fields={["actual", "model"]}
+          fieldLabels={{ model: evaluationModelLabel(report.summary.model) }}
           unit={unitName(report.summary.profile.metric)}
         />
       )}
       <p className="muted">
-        Бирюзовый — факт, оранжевый — сезонная база. Пик: 07–09 и 17–19 по
-        Москве, только для часовых данных. WAPE считается по сумме ошибок, а не
-        среднему процентов.
+        Бирюзовый — факт, оранжевый — прогноз проверяемой модели. WAPE считается
+        по сумме ошибок, а не среднему процентов.
       </p>
+      {report.peak_rule && (
+        <p className="muted">Правило пика: {peakRuleLabel(report.peak_rule)}</p>
+      )}
     </>
   );
 }

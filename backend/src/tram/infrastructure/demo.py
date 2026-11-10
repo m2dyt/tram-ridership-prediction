@@ -7,12 +7,22 @@ from tram.domain.allocation import ESTIMATION_METHOD, stop_shares
 from tram.domain.time import MOSCOW, Resolution, add_months, advance
 
 
+def _hourly_demand(timestamp):
+    """Synthetic weekday peaks make the map scale visible in the demo."""
+    hour = timestamp.hour
+    if timestamp.weekday() >= 5:
+        return 10 + max(0, 56 - abs(hour - 14) * 9)
+    morning = max(0, 88 - abs(hour - 8) * 29)
+    evening = max(0, 75 - abs(hour - 18) * 24)
+    return 12 + morning + evening
+
+
 def write_demo(directory, now):
     # Exclusive creation prevents accidental replacement of a user's prepared files.
     directory.mkdir(parents=True, exist_ok=False)
     midnight = now.astimezone(MOSCOW).replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = midnight.replace(day=1)
-    revision = "demo-data-v3-" + midnight.strftime("%Y%m%d")
+    revision = "demo-data-v4-" + midnight.strftime("%Y%m%d")
     network_id, route_id = "demo-network-v3", "demo-route-01"
     warning = "Synthetic demonstration data; not real ridership or measured model accuracy"
     stops = [
@@ -150,7 +160,9 @@ def write_demo(directory, now):
                     "allowed_as_of_start": midnight.isoformat(),
                     "allowed_as_of_end": midnight.isoformat(),
                     "forecast_start_min": start.isoformat(),
-                    "forecast_start_max": start.isoformat(),
+                    "forecast_start_max": (
+                        start + timedelta(days=6) if horizon == "day" else start
+                    ).isoformat(),
                     "start_alignment": "month_start" if horizon == "year" else "local_midnight",
                     "evaluation_status": "pending",
                     "prediction_interval_available": False,
@@ -193,7 +205,7 @@ def write_demo(directory, now):
             while cursor < history_end:
                 end = advance(cursor, resolution)
                 value = (
-                    (30 + cursor.hour * 2)
+                    _hourly_demand(cursor)
                     if resolution == Resolution.HOUR
                     else (900 + cursor.weekday() * 40)
                     if resolution == Resolution.DAY
@@ -287,7 +299,7 @@ def write_demo(directory, now):
                         "spatial": spatial,
                         "interval_start": cursor.isoformat(),
                         "interval_end": end.isoformat(),
-                        "value": round((30 + cursor.hour * 2) * share, 6),
+                        "value": round(_hourly_demand(cursor) * share, 6),
                         "missing_reason": None,
                         "value_kind": "estimated",
                         "estimation_method": ESTIMATION_METHOD,

@@ -12,12 +12,19 @@ import {
   useCreateForecastRun,
   useForecastPoints,
   useForecastMap,
-  useHealth,
+  useMe,
 } from "../api/hooks";
 import Chart from "../components/Chart.jsx";
 import Map from "../components/Map.jsx";
 import ForecastAggregate from "./ForecastAggregate.jsx";
 import { levelName, spatialLabel } from "../domain/aggregate.js";
+import {
+  explainForecastText,
+  forecastCoverageLabel,
+  forecastDateRange,
+  forecastIssue,
+  forecastModelLabel,
+} from "../domain/forecast.js";
 import {
   date,
   horizonName,
@@ -30,7 +37,7 @@ import {
 } from "../domain/format.js";
 
 export default function Forecast({ caps, route }) {
-  const healthQuery = useHealth();
+  const userQuery = useMe();
   const profiles = caps.forecast_profiles.filter((p) =>
     p.route_ids.includes(route.route.id),
   );
@@ -73,8 +80,15 @@ export default function Forecast({ caps, route }) {
   };
 
   const createMutation = useCreateForecastRun();
+  const issue = forecastIssue({
+    profile,
+    role: userQuery.data?.role,
+    start,
+    asOf,
+  });
   async function create(e) {
     e.preventDefault();
+    if (issue) return;
     setBusy(true);
     setError(null);
     try {
@@ -99,32 +113,35 @@ export default function Forecast({ caps, route }) {
       <section className="panel controls">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">ПРОГНОЗ ЧЕРЕЗ API И WORKER</p>
             <h2>Прогноз пассажиропотока</h2>
+            <p className="forecast-intro">
+              Выберите период для маршрута {route.route.number}, затем запустите
+              расчёт. После завершения можно изучить график, карту и итоги за
+              выбранный промежуток.
+            </p>
           </div>
-          <Badge>
-            {healthQuery.data?.model === "ok" && healthQuery.data?.model_version
-              ? `ML · ${healthQuery.data.model_version}`
-              : "Сезонная базовая модель"}
-          </Badge>
         </div>
         <form className="form-grid" onSubmit={create}>
           <label>
-            Горизонт
+            Период и детализация
             <select
               value={profile.id}
               onChange={(e) => setProfileId(e.target.value)}
             >
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {horizonName(p.horizon)} · {unitName(p.metric)}
+                  {horizonName(p.horizon)} · {unitName(p.metric)} ·{" "}
+                  {{ hour: "по часам", day: "по дням", month: "по месяцам" }[
+                    p.resolution
+                  ] || p.resolution}
                   {levelName(p.spatial_level)}
+                  {p.availability !== "available" ? " · недоступно" : ""}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Начало, Москва
+            Начало прогноза, Москва
             <input
               required
               type="datetime-local"
@@ -135,7 +152,7 @@ export default function Forecast({ caps, route }) {
             />
           </label>
           <label>
-            Сведения на момент
+            Данные доступны на дату, Москва
             <input
               required
               type="datetime-local"
@@ -145,10 +162,43 @@ export default function Forecast({ caps, route }) {
               onChange={(e) => setAsOf(e.target.value)}
             />
           </label>
-          <button disabled={busy || profile.availability !== "available"}>
+          <button disabled={busy || Boolean(issue)}>
             {busy ? "Создаём…" : "Рассчитать прогноз ↗"}
           </button>
         </form>
+        <div className="forecast-hint">
+          <p>
+            Дата доступных данных ограничивает историю, которую расчёт может
+            использовать. Все даты указаны по московскому времени.
+          </p>
+          <p>
+            Начало прогноза:{" "}
+            {forecastDateRange(
+              profile.forecast_start_min,
+              profile.forecast_start_max,
+            )}
+            . Данные доступны на дату:{" "}
+            {forecastDateRange(
+              profile.allowed_as_of_start,
+              profile.allowed_as_of_end,
+            )}
+            .
+            {profile.start_alignment === "month_start"
+              ? " Начало — первое число месяца в 00:00."
+              : profile.start_alignment === "local_midnight"
+                ? " Начало — в 00:00."
+                : ""}
+          </p>
+          {profile.limitations?.map((limitation, index) => (
+            <p key={index}>{explainForecastText(limitation)}</p>
+          ))}
+        </div>
+        {issue && (
+          <p className="notice" role="status">
+            {explainForecastText(issue)}
+          </p>
+        )}
+        <ErrorBox error={userQuery.error} />
         <ErrorBox error={error} />
         <div className="run-selector">
           <label>
@@ -191,8 +241,10 @@ export default function Forecast({ caps, route }) {
       )}
       {["queued", "running"].includes(run.data?.status) && (
         <div className="notice">
-          {statusName(run.data.status)}. Worker обрабатывает задание; состояние
-          обновляется автоматически.
+          {run.data.status === "queued"
+            ? "Расчёт ожидает обработки."
+            : "Расчёт выполняется."}{" "}
+          Состояние обновляется автоматически.
         </div>
       )}
       {run.data?.status === "succeeded" ? (
@@ -262,39 +314,91 @@ function Result({ run, route }) {
   const max = values.length ? Math.max(...values) : null;
   return (
     <>
+      <section className="panel forecast-result-summary">
+        <div className="section-heading">
+          <div>
+            <h2>Результат расчёта</h2>
+            <p className="muted">
+              Маршрут {route.route.number} · {horizonName(run.profile.horizon)}{" "}
+              · {unitName(run.profile.metric)}
+            </p>
+          </div>
+          <Badge>{forecastModelLabel(run.model)}</Badge>
+        </div>
+        <p>
+          Период прогноза: с {date(run.forecast_start)} до{" "}
+          {date(run.forecast_end)}, не включая конечный момент. История доступна
+          на {date(run.as_of)}.
+        </p>
+        {run.warnings?.length > 0 && (
+          <ul>
+            {run.warnings.map((warning, index) => (
+              <li key={index}>{explainForecastText(warning)}</li>
+            ))}
+          </ul>
+        )}
+      </section>
       <div className="stat-grid">
         <div className="stat">
           <span>Пик выбранного ряда</span>
-          <strong>{number(max)}</strong>
+          <strong>
+            {result.loading
+              ? "Загрузка…"
+              : result.error
+                ? "Нет данных"
+                : number(max)}
+          </strong>
           <small>{unitName(run.profile.metric)} за интервал</small>
         </div>
         <div className="stat">
           <span>Покрытие прогноза</span>
           <strong>
-            {values.length}
-            <em> / {points.length}</em>
+            {forecastCoverageLabel({
+              loading: result.loading,
+              error: result.error,
+              points,
+            })}
           </strong>
           <small>интервалов со значением</small>
         </div>
         <div className="stat">
           <span>Метод</span>
-          {run.model.method === "tram_bundle" ? (
+          {run.model?.method === "tram_bundle" ? (
             <>
-              <strong className="word-stat">Обученная модель</strong>
+              <strong className="word-stat">
+                {run.model.is_baseline
+                  ? "Базовая модель по сезонному профилю"
+                  : "Обученная модель"}
+              </strong>
               <small>
-                Версия {run.model.version} · данные для обучения до{" "}
-                {new Intl.DateTimeFormat("ru-RU", {
-                  timeZone: "Europe/Moscow",
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }).format(new Date(run.model.training_history_end))}
+                Версия {run.model.version}{" "}
+                {run.model.training_history_end && (
+                  <>
+                    ·{" "}
+                    {run.model.is_baseline
+                      ? "исторические данные до"
+                      : "данные для обучения до"}{" "}
+                    {new Intl.DateTimeFormat("ru-RU", {
+                      timeZone: "Europe/Moscow",
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    }).format(new Date(run.model.training_history_end))}
+                  </>
+                )}
               </small>
             </>
-          ) : (
+          ) : run.model?.method === "seasonal_naive_v1" ? (
             <>
               <strong className="word-stat">Сезонная база</strong>
               <small>Версия {run.model.version} · обучение не требуется</small>
+            </>
+          ) : (
+            <>
+              <strong className="word-stat">
+                {forecastModelLabel(run.model)}
+              </strong>
+              <small>Метод указан в параметрах расчёта</small>
             </>
           )}
         </div>

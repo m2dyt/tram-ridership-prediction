@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { Badge, Empty, ErrorBox, Loading } from "../components/Common";
-import { date, number, statusName } from "../domain/format";
+import { number } from "../domain/format";
 import { useModels, useModel } from "../api/hooks";
 
 export default function ModelsPage() {
   const modelsQuery = useModels();
   const models = {
-    data: modelsQuery.data,
+    data: modelsQuery.data?.items,
     loading: modelsQuery.isLoading,
     error: modelsQuery.error,
   };
@@ -47,10 +47,16 @@ export default function ModelsPage() {
         </div>
 
         <ErrorBox error={models.error} />
+        {modelsQuery.data?.activeVersionError && (
+          <div className="notice error" role="alert">
+            Не удалось определить активную версию модели:{" "}
+            {modelsQuery.data.activeVersionError}
+          </div>
+        )}
 
         {models.loading ? (
           <Loading />
-        ) : models.data?.length > 0 ? (
+        ) : models.error ? null : models.data?.length > 0 ? (
           <div className="run-selector" style={{ marginTop: "20px" }}>
             <label>
               Доступные модели
@@ -70,10 +76,16 @@ export default function ModelsPage() {
             </button>
           </div>
         ) : (
-          <Empty>В системе пока нет обученных моделей.</Empty>
+          <Empty>
+            Артефакты обученных моделей не найдены. Для опубликованных профилей
+            может использоваться сезонная базовая модель; её метод указан в
+            готовом расчёте.
+          </Empty>
         )}
       </section>
 
+      {currentId && model.loading && <Loading />}
+      <ErrorBox error={model.error} />
       {model.data && (
         <section className="panel" style={{ marginTop: "20px" }}>
           <div className="section-heading">
@@ -82,58 +94,59 @@ export default function ModelsPage() {
               <Badge tone="primary">Активная (Active)</Badge>
             )}
           </div>
-
-          <ErrorBox error={model.error} />
-
-          {model.loading ? (
-            <Loading />
-          ) : (
-            <>
-              <div className="stat-grid" style={{ marginBottom: "20px" }}>
-                <div className="stat">
-                  <span>Статус</span>
-                  <strong className="word-stat">
-                    {statusName(model.data.status)}
-                  </strong>
-                  <small>Текущее состояние</small>
-                </div>
-                <div className="stat">
-                  <span>Метрика (WAPE)</span>
-                  <strong>
-                    {model.data.metrics?.overall?.wape != null
-                      ? number(model.data.metrics.overall.wape * 100) + "%"
-                      : "—"}
-                  </strong>
-                  <small>Качество на валидации</small>
-                </div>
-                <div className="stat">
-                  <span>Score</span>
-                  <strong>
-                    {model.data.metrics?.overall?.wape_score != null
-                      ? number(model.data.metrics.overall.wape_score)
-                      : "—"}
-                  </strong>
-                  <small>Общий балл</small>
-                </div>
-              </div>
-
-              <div style={{ marginTop: "20px" }}>
-                <h3>Паспорт модели (Model Card)</h3>
-                <pre
-                  style={{
-                    background: "var(--bg-panel)",
-                    padding: "16px",
-                    borderRadius: "8px",
-                    overflowX: "auto",
-                    whiteSpace: "pre-wrap",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {model.data.card || "Описание отсутствует"}
-                </pre>
-              </div>
-            </>
+          {model.data.error && (
+            <div className="notice error" role="alert">
+              Модель недоступна: {model.data.error}
+            </div>
           )}
+
+          <>
+            <div className="stat-grid" style={{ marginBottom: "20px" }}>
+              <div className="stat">
+                <span>Статус</span>
+                <strong className="word-stat">
+                  {{ available: "Доступна", invalid: "Ошибка" }[
+                    model.data.status
+                  ] || model.data.status}
+                </strong>
+                <small>Текущее состояние</small>
+              </div>
+              <div className="stat">
+                <span>Метрика (WAPE)</span>
+                <strong>
+                  {model.data.metrics?.overall?.wape != null
+                    ? number(model.data.metrics.overall.wape * 100) + "%"
+                    : "—"}
+                </strong>
+                <small>Качество на валидации</small>
+              </div>
+              <div className="stat">
+                <span>Score</span>
+                <strong>
+                  {model.data.metrics?.overall?.wape_score != null
+                    ? number(model.data.metrics.overall.wape_score)
+                    : "—"}
+                </strong>
+                <small>Общий балл</small>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "20px" }}>
+              <h3>Паспорт модели (Model Card)</h3>
+              <pre
+                style={{
+                  background: "var(--bg-panel)",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "monospace",
+                }}
+              >
+                {model.data.card || "Описание отсутствует"}
+              </pre>
+            </div>
+          </>
         </section>
       )}
     </>

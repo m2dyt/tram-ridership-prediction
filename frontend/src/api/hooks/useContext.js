@@ -2,15 +2,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchJson } from "./_utils";
 import { apiFetch } from "../apiFetch";
 import { getToken } from "../tokenBus";
+import { fetchPages } from "../observationPages.js";
 
 export function useContextSnapshots(params = {}) {
   return useQuery({
     queryKey: ["context-snapshots", params],
     enabled: !!getToken(),
-    queryFn: async () => {
-      const data = await fetchJson("/context/snapshots", params);
-      return data.items || [];
-    },
+    queryFn: () => fetchPages(fetchJson, "/context/snapshots", params),
   });
 }
 

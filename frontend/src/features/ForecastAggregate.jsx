@@ -3,6 +3,7 @@ import Chart from "../components/Chart.jsx";
 import { Download, ErrorBox, Loading } from "../components/Common.jsx";
 import { useForecastAggregate } from "../api/hooks";
 import { date, number, unitName } from "../domain/format.js";
+import { explainForecastText } from "../domain/forecast.js";
 import {
   endFromInput,
   fromInput,
@@ -111,13 +112,34 @@ export default function ForecastAggregate({ run, route }) {
           <h2>Итоги по участку сети и периоду</h2>
         </div>
         <Download
-          points={(data?.groups || []).map((g) => ({
-            group: isTimeGroup(data.group_by)
-              ? date(g.interval_start)
-              : spatialLabel(g, route),
+          points={(data
+            ? data.groups.length
+              ? data.groups
+              : [data.summary]
+            : []
+          ).map((g) => ({
             ...g,
-            quality: g.quality.status,
+            group: data.groups.length
+              ? isTimeGroup(data.group_by)
+                ? date(g.interval_start)
+                : spatialLabel(g, route)
+              : "Итого",
+            quality_status: g.quality?.status,
+            coverage_ratio: g.quality?.coverage_ratio,
           }))}
+          fields={[
+            "group",
+            "interval_start",
+            "interval_end",
+            "value",
+            "interval_mean",
+            "interval_max",
+            "peak_interval_start",
+            "point_count",
+            "missing_count",
+            "coverage_ratio",
+            "quality_status",
+          ]}
           name={`forecast-aggregate-${run.id.slice(0, 8)}.csv`}
         />
       </div>
@@ -262,7 +284,9 @@ export default function ForecastAggregate({ run, route }) {
         </p>
       ) : (
         run.profile.limitations?.length > 0 && (
-          <p className="muted">{run.profile.limitations.join(" ")}</p>
+          <p className="muted">
+            {run.profile.limitations.map(explainForecastText).join(" ")}
+          </p>
         )
       )}
       {periodError && <div className="notice error">{periodError}</div>}

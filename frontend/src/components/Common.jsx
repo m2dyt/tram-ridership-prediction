@@ -56,10 +56,10 @@ export function Empty({ children }) {
 export function Badge({ children, tone = "" }) {
   return <span className={"badge " + tone}>{children}</span>;
 }
-export function Download({ points, name = "tram-data.csv" }) {
+export function Download({ points, name = "tram-data.csv", fields }) {
   function save() {
     const url = URL.createObjectURL(
-      new Blob([exportCsv(points)], { type: "text/csv;charset=utf-8" }),
+      new Blob([exportCsv(points, fields)], { type: "text/csv;charset=utf-8" }),
     );
     const a = document.createElement("a");
     a.href = url;

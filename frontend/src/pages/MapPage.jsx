@@ -12,9 +12,15 @@ import {
   Popup,
   NavigationControl,
 } from "@vis.gl/react-maplibre";
+import MapDemand from "../features/MapDemand.jsx";
 import { mapLib } from "../components/mapLib.js";
 import { ClusterComponent } from "../components/ClusterComponent";
 import { useObservations } from "../api/hooks";
+import { date, unitName } from "../domain/format.js";
+import {
+  mapObservationProfile,
+  observationWindow,
+} from "../domain/dashboardData.js";
 import {
   CARTO_MAP_STYLE,
   FALLBACK_MAP_STYLE,
@@ -87,6 +93,35 @@ function getBoundsForRoute(features, stops) {
 }
 
 export default function MapPage({ route, caps }) {
+  const [mode, setMode] = useState("overview");
+  return (
+    <>
+      <div className="demand-mode" role="group" aria-label="Режим карты">
+        <button
+          type="button"
+          aria-pressed={mode === "overview"}
+          onClick={() => setMode("overview")}
+        >
+          Схема маршрута
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === "forecast"}
+          onClick={() => setMode("forecast")}
+        >
+          Прогноз нагрузки
+        </button>
+      </div>
+      {mode === "forecast" ? (
+        <MapDemand caps={caps} />
+      ) : (
+        <RouteOverview route={route} caps={caps} />
+      )}
+    </>
+  );
+}
+
+function RouteOverview({ route, caps }) {
   const mapRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [popUpData, setPopUpData] = useState(null);
@@ -121,16 +156,35 @@ export default function MapPage({ route, caps }) {
     });
   }, [route?.stops]);
 
+  const direction = useMemo(
+    () =>
+      (route?.directions || []).find((item) => item.geometry) ||
+      route?.directions?.[0],
+    [route?.directions],
+  );
   const directionName = useMemo(() => {
-    if (!stopsData || stopsData.length < 2) return route?.route?.name || "—";
-    return `${stopsData[0].name} — ${stopsData[stopsData.length - 1].name}`;
-  }, [stopsData, route]);
+    const names = (direction?.stops || [])
+      .slice()
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((item) => stopsData.find((stop) => stop.id === item.stop_id)?.name)
+      .filter(Boolean);
+    return names.length > 1
+      ? `${names[0]} — ${names[names.length - 1]}`
+      : direction?.name || "Нет данных";
+  }, [direction, stopsData]);
 
   const routeLengthKm = useMemo(() => {
-    if (!realGeom.length) return null;
+    const geometry = direction?.geometry;
+    if (!geometry) return null;
+    const lines =
+      geometry.type === "LineString"
+        ? [geometry.coordinates]
+        : geometry.type === "MultiLineString"
+          ? geometry.coordinates
+          : [];
+    if (!lines.length) return null;
     let total = 0;
-    realGeom.forEach((f) => {
-      const coords = f.geometry.coordinates;
+    lines.forEach((coords) => {
       for (let i = 1; i < coords.length; i++) {
         const dlat = (coords[i][1] - coords[i - 1][1]) * 111100;
         const dlon = (coords[i][0] - coords[i - 1][0]) * 62500;
@@ -138,29 +192,27 @@ export default function MapPage({ route, caps }) {
       }
     });
     return (total / 1000).toFixed(2);
-  }, [realGeom]);
+  }, [direction]);
 
-  const profile = caps?.observation_profiles?.find((item) =>
-    item.route_ids?.includes(route?.route?.id),
+  const profile = mapObservationProfile(
+    caps?.observation_profiles,
+    route?.route?.id,
   );
-  const observationWindow = useMemo(() => {
-    if (!profile?.history_end) return null;
-    const end = new Date(profile.history_end);
-    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-    return { from: start.toISOString(), to: end.toISOString() };
-  }, [profile?.history_end]);
+  const window = useMemo(() => observationWindow(profile, 1), [profile]);
   const observationsQuery = useObservations(
-    profile && observationWindow
+    profile && window
       ? {
           dataset_revision_id: caps.dataset_revision_id,
           observation_profile_id: profile.id,
           route_id: route?.route?.id,
-          ...observationWindow,
+          ...window,
         }
       : null,
   );
   const observedPoints = observationsQuery.data || [];
-  const knownPoints = observedPoints.filter((point) => point.value != null);
+  const knownPoints = observedPoints.filter((point) =>
+    Number.isFinite(point.value),
+  );
   const observedTotal = knownPoints.reduce(
     (total, point) => total + point.value,
     0,
@@ -240,7 +292,11 @@ export default function MapPage({ route, caps }) {
           <strong className="stat-value">
             № {route?.route?.number || "—"}
           </strong>
-          <span className="stat-sub">Трамвайная сеть Москвы</span>
+          <span className="stat-sub">
+            {caps?.source_mode === "demo"
+              ? "Демонстрационный маршрут"
+              : "Трамвайная сеть Москвы"}
+          </span>
         </div>
 
         <div className="stat stat-pattern" style={{ gridColumn: "span 2" }}>
@@ -258,32 +314,44 @@ export default function MapPage({ route, caps }) {
             <img src="/icons/geo_icon.svg" alt="" className="stat-icon" />
           </div>
           <strong className="stat-value">{stopsData.length || "—"}</strong>
-          <span className="stat-sub">Посадочные платформы</span>
+          <span className="stat-sub">По данным справочника маршрута</span>
         </div>
 
         <div className="stat stat-pattern">
           <div className="stat-top">
-            <span className="stat-label">Протяжённость (км)</span>
+            <span className="stat-label">Длина направления (км)</span>
             <img src="/icons/Column_graphs.svg" alt="" className="stat-icon" />
           </div>
           <strong className="stat-value">{routeLengthKm || "—"}</strong>
-          <span className="stat-sub">Длина рельсового полотна</span>
+          <span className="stat-sub">
+            Приблизительно, по геометрии направления
+          </span>
         </div>
 
         <div className="stat stat-pattern">
           <div className="stat-top">
-            <span className="stat-label">Факт за последние 24 часа</span>
+            <span className="stat-label">Последние наблюдения</span>
             <img src="/icons/signal_icon.svg" alt="" className="stat-icon" />
           </div>
           <strong className="stat-value">
-            {knownPoints.length
-              ? observedTotal.toLocaleString("ru-RU")
-              : "Нет данных"}
+            {observationsQuery.isLoading
+              ? "Загрузка…"
+              : observationsQuery.isError
+                ? "Ошибка загрузки"
+                : knownPoints.length
+                  ? `${observedTotal.toLocaleString("ru-RU")} ${unitName(profile?.metric)}`
+                  : "Нет данных"}
           </strong>
           <span className="stat-sub">
-            {knownPoints.length
-              ? `Заполнено часов: ${knownPoints.length} из 24`
-              : "В базе нет наблюдений за этот период"}
+            {observationsQuery.isError
+              ? "Не удалось получить наблюдения. Обновите страницу."
+              : !profile || !window
+                ? "Нет почасовых данных по маршруту"
+                : knownPoints.length
+                  ? `${date(window.from)} — ${date(window.to)} · заполнено часов: ${knownPoints.length}`
+                  : observationsQuery.isLoading
+                    ? "Загружаем наблюдения"
+                    : "В доступной истории нет наблюдений за этот период"}
           </span>
         </div>
       </div>

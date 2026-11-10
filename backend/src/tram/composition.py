@@ -111,8 +111,27 @@ def create_app():
         ),
     )
     if settings.frontend_dist.is_dir():
+        from fastapi.responses import FileResponse
         from fastapi.staticfiles import StaticFiles
 
+        index = settings.frontend_dist / "index.html"
+        if index.is_file():
+
+            async def frontend_page():
+                return FileResponse(index)
+
+            for path in (
+                "/dashboard",
+                "/forecast",
+                "/history",
+                "/evaluations",
+                "/occupancy",
+                "/context",
+                "/models",
+            ):
+                app.add_api_route(
+                    path, frontend_page, methods=["GET", "HEAD"], include_in_schema=False
+                )
         app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="frontend")
     return app
 
