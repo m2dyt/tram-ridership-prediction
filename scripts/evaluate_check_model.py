@@ -15,10 +15,14 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from tram.cli import main as tram_main
-from tram.infrastructure.database import make_engine, session_factory
-from tram.infrastructure.repository import SqlRepository
-from tram.infrastructure.settings import Settings
+# Run as a file (python scripts/evaluate_check_model.py): the repository root holds the ml
+# package that the model bundle needs, so put it on the import path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tram.cli import main as tram_main  # noqa: E402
+from tram.infrastructure.database import make_engine, session_factory  # noqa: E402
+from tram.infrastructure.repository import SqlRepository  # noqa: E402
+from tram.infrastructure.settings import Settings  # noqa: E402
 
 
 def main(version: str) -> int:

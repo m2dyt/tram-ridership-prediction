@@ -189,6 +189,11 @@ class ArtifactPredictor:
             }
         )
         values, lower, upper = adaptive.forecast(self.bundle.models, route_rows, target)
+        # Route totals are whole passengers, like the earlier model; the range is rounded
+        # outwards so it still contains the value. Stop values stay fractional shares.
+        values = np.round(values)
+        if lower is not None:
+            lower, upper = np.floor(np.minimum(lower, values)), np.ceil(np.maximum(upper, values))
         shares = _stop_shares(series, stop_obs, self.bundle.models.get("recent_days", 28))
         band_info = self.bundle.models.get("intervals") or {}
         reference = aware(as_of)
