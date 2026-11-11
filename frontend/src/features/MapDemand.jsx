@@ -72,7 +72,9 @@ export default function MapDemand({ caps }) {
     return (
       <section className="demand-board demand-header">
         <h2>Прогноз нагрузки</h2>
-        <p>В опубликованных данных нет почасового прогноза валидаций.</p>
+        <p>
+          В опубликованных данных нет почасового прогноза посадок или валидаций.
+        </p>
       </section>
     );
   return (

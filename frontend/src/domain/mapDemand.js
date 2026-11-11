@@ -22,7 +22,7 @@ function eligibleProfiles(caps) {
       profile.availability === "available" &&
       profile.horizon === "day" &&
       profile.resolution === "hour" &&
-      profile.metric === "validations" &&
+      ["validations", "boardings"].includes(profile.metric) &&
       profile.aggregation_method === "sum" &&
       ["route", "stop"].includes(profile.spatial_level) &&
       profile.forecast_start_min &&

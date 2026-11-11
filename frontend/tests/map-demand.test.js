@@ -77,3 +77,37 @@ test("load is relative to its own day and missing or partial points stay unclass
   assert.equal(classifyDemand(0, 0), "low");
   assert.equal(classifyDemand(null, 10), "unknown");
 });
+
+test("accepts boarding profiles of the published competition data", () => {
+  const caps = {
+    dataset_revision_id: "rev",
+    max_routes_per_run: 100,
+    forecast_profiles: [
+      {
+        ...base,
+        id: "route",
+        metric: "boardings",
+        spatial_level: "route",
+        route_ids: ["a"],
+      },
+      {
+        ...base,
+        id: "occupancy",
+        metric: "occupancy",
+        spatial_level: "route",
+        route_ids: ["b"],
+      },
+    ],
+  };
+  const plan = demandPlan(
+    caps,
+    routes,
+    "2026-11-11",
+    "2026-11-11",
+    Date.parse("2026-11-10T09:00:00Z"),
+  );
+  assert.deepEqual(
+    plan.map((request) => [request.profile_id, request.route_ids]),
+    [["route", ["a"]]],
+  );
+});
