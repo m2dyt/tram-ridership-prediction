@@ -30,7 +30,7 @@ function eligibleProfiles(caps) {
   );
 }
 
-export function demandDates(caps) {
+export function demandDates(caps, now = Date.now()) {
   const profiles = eligibleProfiles(caps);
   if (!profiles.length) return null;
   const min = Math.min(
@@ -42,11 +42,13 @@ export function demandDates(caps) {
   return {
     min: localDay(min),
     max: localDay(max),
+    // Завтра, если оно входит в окно прогноза, иначе первый доступный день:
+    // у прошлых данных окно целиком в прошлом, и с начала окна видна вся неделя.
     initial: localDay(
-      Math.max(
-        min,
-        Math.min(max, Date.parse(dayStart(localDay(Date.now()))) + DAY),
-      ),
+      (() => {
+        const tomorrow = Date.parse(dayStart(localDay(now))) + DAY;
+        return tomorrow >= min && tomorrow <= max ? tomorrow : min;
+      })(),
     ),
   };
 }

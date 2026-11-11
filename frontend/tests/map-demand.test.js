@@ -6,6 +6,7 @@ import {
   demandAt,
   classifyDemand,
   demandRequestKey,
+  demandDates,
 } from "../src/domain/mapDemand.js";
 
 const base = {
@@ -134,4 +135,27 @@ test("the same demand request always gets the same retry key", async () => {
     }),
   );
   assert.ok(key.length >= 8 && key.length <= 128);
+});
+
+test("the map starts at tomorrow inside the window, otherwise at its first day", () => {
+  const caps = {
+    forecast_profiles: [
+      {
+        ...base,
+        id: "route",
+        spatial_level: "route",
+        route_ids: ["a"],
+        forecast_start_min: "2025-11-01T00:00:00+03:00",
+        forecast_start_max: "2025-11-07T00:00:00+03:00",
+      },
+    ],
+  };
+  const inside = Date.parse("2025-11-03T12:00:00+03:00");
+  assert.equal(demandDates(caps, inside).initial, "2025-11-04");
+  const later = Date.parse("2026-11-12T12:00:00+03:00");
+  assert.deepEqual(demandDates(caps, later), {
+    min: "2025-11-01",
+    max: "2025-11-07",
+    initial: "2025-11-01",
+  });
 });

@@ -12,7 +12,11 @@ export default function ModelsPage() {
   };
 
   const [selectedId, setSelectedId] = useState("");
-  const currentId = selectedId || models.data?.[0]?.id;
+  // По умолчанию открыта активная версия, а не первая по алфавиту.
+  const currentId =
+    selectedId ||
+    models.data?.find((model) => model.is_active)?.id ||
+    models.data?.[0]?.id;
 
   const modelQuery = useModel(currentId);
   const model = {
