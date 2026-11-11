@@ -1,8 +1,8 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../apiFetch.js";
 import { fetchPages } from "../observationPages.js";
 import { fetchJson } from "./_utils.js";
-import { findDemandRun } from "../../domain/mapDemand.js";
+import { demandRequestKey, findDemandRun } from "../../domain/mapDemand.js";
 
 const runPath = (id) => `/forecast-runs/${encodeURIComponent(id)}`;
 const pending = (run) => ["queued", "running"].includes(run?.status);
@@ -32,36 +32,35 @@ export function useDemandNetwork(revision, days) {
 
 export function useMapDemand(plan, user) {
   const preparation = useQuery({
-    queryKey: ["map-demand-runs", user?.username, user?.role, plan],
+    queryKey: ["map-demand-runs", plan],
     enabled: Boolean(user && plan.length),
-    staleTime: user?.role === "operator" ? Infinity : 30000,
+    staleTime: 30000,
     retry: false,
-    queryFn: async ({ signal }) => {
+    // Просмотр карты только ищет готовые расчёты и ничего не ставит в очередь.
+    queryFn: async () => {
       const runs = await fetchPages(fetchJson, "/forecast-runs", {
         dataset_revision_id: plan[0].dataset_revision_id,
       });
-      const result = [];
-      for (const request of plan) {
-        signal.throwIfAborted();
-        let run = findDemandRun(runs, request);
-        if (!run && user.role === "operator") {
-          try {
-            const response = await apiFetch("/forecast-runs", {
-              method: "POST",
-              body: JSON.stringify(request),
-              headers: { "Idempotency-Key": crypto.randomUUID() },
-            });
-            run = await response.json();
-            runs.unshift(run);
-          } catch (error) {
-            result.push({ request, error });
-            continue;
-          }
-        }
-        result.push({ request, run });
-      }
-      return result;
+      return plan.map((request) => ({
+        request,
+        run: findDemandRun(runs, request),
+      }));
     },
+  });
+
+  // Недостающие расчёты оператор запускает сам кнопкой. Ключ повтора зависит
+  // только от запроса, поэтому повторное нажатие не создаёт второе задание.
+  const creation = useMutation({
+    mutationFn: async (requests) => {
+      for (const request of requests) {
+        await apiFetch("/forecast-runs", {
+          method: "POST",
+          body: JSON.stringify(request),
+          headers: { "Idempotency-Key": await demandRequestKey(request) },
+        });
+      }
+    },
+    onSettled: () => preparation.refetch(),
   });
 
   const items = preparation.data || [];
@@ -104,7 +103,6 @@ export function useMapDemand(plan, user) {
   const ready = results.filter((result) => result.isSuccess).length;
   const errors = [
     preparation.error?.message,
-    ...items.map(({ error }) => error?.message),
     ...statuses.map(
       (status) => status.error?.message || status.data?.failure?.message,
     ),
@@ -118,8 +116,14 @@ export function useMapDemand(plan, user) {
       preparation.isLoading ||
       statuses.some((status) => pending(status.data)) ||
       results.some((result) => result.isLoading),
-    unavailable: items.filter(({ run, error }) => !run && !error).length,
-    errors: [...new Set(errors)],
+    unavailable: items.filter(({ run }) => !run).length,
+    canCreate: user?.role === "operator",
+    creating: creation.isPending,
+    createMissing: () =>
+      creation.mutate(
+        items.filter(({ run }) => !run).map(({ request }) => request),
+      ),
+    errors: [...new Set([...errors, creation.error?.message].filter(Boolean))],
     retry: async () => {
       await Promise.all(
         [...statuses, ...results.filter((result) => result.isError)]

@@ -125,6 +125,25 @@ export function findDemandRun(runs, request) {
   );
 }
 
+// Ключ повтора для POST /forecast-runs: одинаковый запрос даёт одинаковый ключ.
+export async function demandRequestKey(request) {
+  const text = JSON.stringify([
+    request.dataset_revision_id,
+    request.profile_id,
+    request.forecast_start,
+    request.as_of,
+    [...request.route_ids].sort(),
+  ]);
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(text),
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `map-demand-${hex}`;
+}
+
 export function classifyDemand(value, mean) {
   if (!Number.isFinite(value) || !Number.isFinite(mean)) return "unknown";
   if (mean === 0) return "low";

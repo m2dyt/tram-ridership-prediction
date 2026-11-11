@@ -5,6 +5,7 @@ import {
   demandIndex,
   demandAt,
   classifyDemand,
+  demandRequestKey,
 } from "../src/domain/mapDemand.js";
 
 const base = {
@@ -110,4 +111,27 @@ test("accepts boarding profiles of the published competition data", () => {
     plan.map((request) => [request.profile_id, request.route_ids]),
     [["route", ["a"]]],
   );
+});
+
+test("the same demand request always gets the same retry key", async () => {
+  const request = {
+    dataset_revision_id: "rev",
+    profile_id: "route",
+    route_ids: ["b", "a"],
+    forecast_start: "2026-11-11T00:00:00+03:00",
+    as_of: "2026-11-09T21:00:00.000Z",
+  };
+  const key = await demandRequestKey(request);
+  assert.equal(
+    key,
+    await demandRequestKey({ ...request, route_ids: ["a", "b"] }),
+  );
+  assert.notEqual(
+    key,
+    await demandRequestKey({
+      ...request,
+      forecast_start: "2026-11-12T00:00:00+03:00",
+    }),
+  );
+  assert.ok(key.length >= 8 && key.length <= 128);
 });
