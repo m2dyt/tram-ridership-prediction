@@ -19,3 +19,4 @@
 | [map-demand.test.js](map-demand.test.js)               | Проверки выбора маршрутов для почасовых расчётов и классификации спроса.      |
 | [model-catalog.test.js](model-catalog.test.js)         | Проверки предупреждений о состоянии активной версии модели.                   |
 | [observations.test.js](observations.test.js)           | Проверки пагинации наблюдений, точек оценки и других списков.                 |
+| [map-bounds.test.js](map-bounds.test.js)               | Проверки границ линий и остановок маршрута для карты прогноза.                |

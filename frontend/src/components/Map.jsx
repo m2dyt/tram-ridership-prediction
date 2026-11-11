@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import MapLibreMap, { Source, Layer } from "@vis.gl/react-maplibre";
 import { mapLib } from "./mapLib.js";
 import {
@@ -6,6 +6,7 @@ import {
   FALLBACK_MAP_STYLE,
   shouldFallbackToLocalMapStyle,
 } from "../domain/mapStyle.js";
+import { featureBounds } from "../domain/mapBounds.js";
 
 const EMPTY_CONTEXT = [];
 
@@ -49,13 +50,35 @@ export default function Map({ route, forecast, context = EMPTY_CONTEXT }) {
     return { type: "FeatureCollection", features };
   }, [route]);
 
+  // Показываем выбранный маршрут целиком, а не центр города
+  const mapRef = useRef(null);
+  const bounds = useMemo(
+    () => featureBounds([...routeFeatures.features, ...stopFeatures.features]),
+    [routeFeatures, stopFeatures],
+  );
+  const fitRoute = () => {
+    if (!bounds) return;
+    try {
+      mapRef.current?.fitBounds(bounds, {
+        padding: 40,
+        maxZoom: 14,
+        duration: 0,
+      });
+    } catch (err) {
+      console.warn("fitBounds failed:", err);
+    }
+  };
+  useEffect(fitRoute, [bounds]);
+
   return (
     <div
       className="map-shell"
       style={{ height: "400px", width: "100%", position: "relative" }}
     >
       <MapLibreMap
+        ref={mapRef}
         mapLib={mapLib}
+        onLoad={fitRoute}
         initialViewState={{
           longitude: 37.628,
           latitude: 55.757,
