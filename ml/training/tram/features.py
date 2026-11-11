@@ -7,7 +7,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Russian 2025 official non-working holidays and transferred days
+from ml.training.tram.calendar import day_flags
+
+# Russian 2025 official non-working holidays and transferred days. Kept for reference and
+# tests; features read the full production calendar in ml/training/tram/calendar.py.
 HOLIDAYS_2025: set[str] = {
     # New Year holidays
     "2025-01-01",
@@ -152,10 +155,15 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     df["month"] = dt.dt.month
     df["is_weekend"] = (df["dayofweek"] >= 5).astype(int)
 
-    df["is_holiday"] = df["date"].isin(HOLIDAYS_2025).astype(int)
-    df["is_preholiday"] = df["date"].isin(PRE_HOLIDAYS_2025).astype(int)
-    df["is_workday"] = ((df["is_weekend"] == 0) & (df["is_holiday"] == 0)).astype(int)
-    df["is_day_off"] = ((df["is_weekend"] == 1) | (df["is_holiday"] == 1)).astype(int)
+    # Official production calendar (ml/training/tram/calendar.py), not only 2025.
+    flags = day_flags(df["date"])
+    df["is_holiday"] = flags["is_holiday"].values
+    df["is_preholiday"] = flags["is_preholiday"].values
+    df["is_working_weekend"] = flags["is_working_weekend"].values
+    df["is_workday"] = (
+        ((df["is_weekend"] == 0) | (df["is_working_weekend"] == 1)) & (df["is_holiday"] == 0)
+    ).astype(int)
+    df["is_day_off"] = (1 - df["is_workday"]).astype(int)
     df["is_summer"] = df["month"].isin([6, 7, 8]).astype(int)
     df["is_cold_season"] = df["month"].isin([10, 11, 12, 1, 2, 3]).astype(int)
 
@@ -163,7 +171,7 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     # and working Saturdays (pre-holidays) operate on Friday schedule (dow=4).
     df["dow_effective"] = df["dayofweek"]
     df.loc[df["is_holiday"] == 1, "dow_effective"] = 6
-    df.loc[(df["is_preholiday"] == 1) & (df["is_weekend"] == 1), "dow_effective"] = 4
+    df.loc[df["is_working_weekend"] == 1, "dow_effective"] = 4
 
     # Cyclical encodings (safe for tree extrapolation)
     df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
