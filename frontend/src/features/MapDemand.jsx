@@ -54,7 +54,7 @@ function DemandStatus({ item, inline = false }) {
       <strong>
         {item.value == null
           ? "Нет прогноза"
-          : `${number(item.value)} валидаций`}
+          : `${number(item.value)} пассажиров`}
       </strong>
       {item.mean != null && (
         <small>Среднее за день: {number(item.mean)} в час</small>
@@ -72,7 +72,9 @@ export default function MapDemand({ caps }) {
     return (
       <section className="demand-board demand-header">
         <h2>Прогноз нагрузки</h2>
-        <p>В опубликованных данных нет почасового прогноза валидаций.</p>
+        <p>
+          В опубликованных данных нет почасового прогноза посадок или валидаций.
+        </p>
       </section>
     );
   return (
@@ -359,8 +361,24 @@ function DemandWorkspace({ caps, bounds }) {
             : classifiedRoutes
               ? `Оценка доступна для ${classifiedRoutes} из ${visible.length} маршрутов на карте.`
               : "На выбранный час нет полной оценки нагрузки."}
-          {result.unavailable > 0 &&
-            " Для запуска новых расчётов войдите как оператор."}
+          {!loading && result.unavailable > 0 && !result.canCreate && (
+            <>
+              {" "}
+              Для части дат прогноз ещё не рассчитан, его запускает оператор.
+            </>
+          )}
+          {!loading && result.unavailable > 0 && result.canCreate && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={result.creating}
+              onClick={result.createMissing}
+            >
+              {result.creating
+                ? "Ставим расчёты в очередь…"
+                : `Рассчитать недостающие прогнозы (${result.unavailable})`}
+            </button>
+          )}
         </div>
       </div>
       <div className="demand-map-grid">
@@ -524,8 +542,8 @@ function DemandWorkspace({ caps, bounds }) {
         <p>
           Цвет сравнивает прогноз на этот час со средним за выбранный день для
           того же маршрута или остановки. Повышенная нагрузка начинается с +20%,
-          пиковая — с +50%. Шкала показывает ожидаемые валидации. Данные о
-          дорожных заторах в расчёте отсутствуют.
+          пиковая — с +50%. Шкала показывает ожидаемое число пассажиров. Данные
+          о дорожных заторах в расчёте отсутствуют.
         </p>
         {(result.errors.length > 0 || network.isError || session.isError) && (
           <div className="demand-error" role="alert">

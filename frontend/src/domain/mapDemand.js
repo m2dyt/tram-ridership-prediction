@@ -22,7 +22,7 @@ function eligibleProfiles(caps) {
       profile.availability === "available" &&
       profile.horizon === "day" &&
       profile.resolution === "hour" &&
-      profile.metric === "validations" &&
+      ["validations", "boardings"].includes(profile.metric) &&
       profile.aggregation_method === "sum" &&
       ["route", "stop"].includes(profile.spatial_level) &&
       profile.forecast_start_min &&
@@ -123,6 +123,25 @@ export function findDemandRun(runs, request) {
       Date.parse(run.as_of) === Date.parse(request.as_of) &&
       request.route_ids.every((id) => run.route_ids.includes(id)),
   );
+}
+
+// Ключ повтора для POST /forecast-runs: одинаковый запрос даёт одинаковый ключ.
+export async function demandRequestKey(request) {
+  const text = JSON.stringify([
+    request.dataset_revision_id,
+    request.profile_id,
+    request.forecast_start,
+    request.as_of,
+    [...request.route_ids].sort(),
+  ]);
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(text),
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `map-demand-${hex}`;
 }
 
 export function classifyDemand(value, mean) {
