@@ -74,6 +74,25 @@ class TestModelBundle(unittest.TestCase):
         self.assertEqual(bundle.metrics["wape_score"], 0.95)
         self.assertIn("prof_route_dow_hour", bundle.profiles)
 
+    def test_model_card_reads_nested_training_metrics(self):
+        """The training CLI passes {"overall": ..., "per_route": ...}; the card must show overall values."""
+        bundle_path = export_model_bundle(
+            version="test_nested",
+            models=None,
+            profiles=self.dummy_profiles,
+            metrics={
+                "overall": {"wape": 0.0988, "wape_score": 0.9012, "mae": 86.06},
+                "per_route": {"17": {"wape": 0.0605, "wape_score": 0.9395, "mae": 126.5}},
+            },
+            config={"model_type": "histgradient", "use_residual": True, "per_route": False},
+            models_root=self.models_root,
+        )
+
+        card = (bundle_path / "model-card.md").read_text(encoding="utf-8")
+        self.assertIn("**Overall WAPE:** `0.0988` (9.88%)", card)
+        self.assertIn("**Overall WAPE-score:** `0.9012`", card)
+        self.assertIn("**Overall MAE:** `86.06`", card)
+
     def test_prevent_accidental_overwrite(self):
         """Exporting to an existing version without overwrite=True must fail."""
         version = "test_v1"

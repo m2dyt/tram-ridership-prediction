@@ -140,6 +140,33 @@ class TramModelBundle:
         return preds
 
 
+def render_model_card(
+    version: str, manifest: dict[str, Any], config: dict[str, Any], metrics: dict[str, Any]
+) -> str:
+    """Text of model-card.md built from the bundle's manifest, config and metrics."""
+    # The training CLI stores {"overall": {...}, "per_route": {...}}; flat metrics are also accepted.
+    overall = metrics.get("overall", metrics)
+    wape = overall.get("wape", 0.0)
+    return f"""# Model Card: Tram Ridership Predictor `{version}`
+
+## Overview
+* **Version:** `{version}`
+* **Created:** {manifest["created_at"]}
+* **Git Commit:** `{manifest.get("git_commit") or "N/A"}`
+* **Model Type:** `{config.get("model_type", "unknown")}`
+* **Residual Learning:** `{config.get("use_residual", True)}`
+* **Per Route Models:** `{config.get("per_route", True)}`
+
+## Performance (Sep-Oct 2025 Validation)
+* **Overall WAPE:** `{wape:.4f}` ({wape * 100:.2f}%)
+* **Overall WAPE-score:** `{overall.get("wape_score", 0.0):.4f}`
+* **Overall MAE:** `{overall.get("mae", 0.0):.2f}`
+
+## Artifacts
+* `estimator.joblib` (SHA-256: `{manifest["estimator_sha256"]}`)
+"""
+
+
 def export_model_bundle(
     version: str,
     models: dict[int, Any] | Any,
@@ -211,24 +238,7 @@ def export_model_bundle(
     )
 
     # 6. Model Card
-    card_content = f"""# Model Card: Tram Ridership Predictor `{version}`
-
-## Overview
-* **Version:** `{version}`
-* **Created:** {manifest["created_at"]}
-* **Git Commit:** `{manifest["git_commit"] or "N/A"}`
-* **Model Type:** `{config.get("model_type", "unknown")}`
-* **Residual Learning:** `{config.get("use_residual", True)}`
-* **Per Route Models:** `{config.get("per_route", True)}`
-
-## Performance (Sep-Oct 2025 Validation)
-* **Overall WAPE:** `{metrics.get("wape", 0.0):.4f}` ({metrics.get("wape", 0.0) * 100:.2f}%)
-* **Overall WAPE-score:** `{metrics.get("wape_score", 0.0):.4f}`
-* **Overall MAE:** `{metrics.get("mae", 0.0):.2f}`
-
-## Artifacts
-* `estimator.joblib` (SHA-256: `{estimator_hash}`)
-"""
+    card_content = render_model_card(version, manifest, config, metrics)
     (bundle_dir / "model-card.md").write_text(card_content, encoding="utf-8")
 
     print(f"Exported model bundle to: {bundle_dir}")
