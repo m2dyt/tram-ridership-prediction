@@ -232,6 +232,29 @@ class SqlRepository:
                 )
             ]
 
+    def prune_runs(self, finished_before, dry_run=False):
+        """Delete finished runs (succeeded or failed) that finished before the given moment,
+        with their points, routes and retry keys. Queued and running runs are never touched.
+        Returns the number of runs deleted (or that would be deleted with dry_run)."""
+        with self.sessions.begin() as session:
+            ids = list(
+                session.scalars(
+                    select(RunRow.id).where(
+                        RunRow.status.in_(("succeeded", "failed")),
+                        RunRow.finished_at.is_not(None),
+                        RunRow.finished_at < finished_before,
+                    )
+                )
+            )
+            if dry_run or not ids:
+                return len(ids)
+            for start in range(0, len(ids), 500):
+                chunk = ids[start : start + 500]
+                for table in (ForecastPointRow, RunRouteRow, RequestKeyRow):
+                    session.execute(delete(table).where(table.run_id.in_(chunk)))
+                session.execute(delete(RunRow).where(RunRow.id.in_(chunk)))
+            return len(ids)
+
     def series(self, revision, profile, route_ids):
         with self.sessions() as session:
             return [

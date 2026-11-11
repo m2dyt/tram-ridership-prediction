@@ -66,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-geo",
         "replay-trip",
         "evaluate",
+        "prune-runs",
         "prepare-csv",
         "export-occupancy",
         "prepare-metro",
