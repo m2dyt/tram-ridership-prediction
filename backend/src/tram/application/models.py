@@ -38,7 +38,7 @@ def _bundle_ineligibility(bundle: Document, profile: Document, route_ids, as_of:
     if profile["resolution"] != "hour":
         return f"profile resolution is {profile['resolution']}, the bundle forecasts hourly values"
     level = profile.get("spatial_level", "route")
-    if level != "route":
+    if level not in bundle.get("spatial_levels", ["route"]):
         return f"profile spatial level is {level}, the bundle forecasts route totals"
     unsupported = [route for route in route_ids if route not in bundle["routes"]]
     if unsupported:

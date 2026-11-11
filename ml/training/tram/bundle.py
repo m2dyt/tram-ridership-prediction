@@ -147,6 +147,24 @@ def render_model_card(
     # The training CLI stores {"overall": {...}, "per_route": {...}}; flat metrics are also accepted.
     overall = metrics.get("overall", metrics)
     wape = overall.get("wape", 0.0)
+    holdout = metrics.get("holdout")
+    period = (
+        f"Holdout {holdout['start']} – {holdout['end']}" if holdout else "Sep-Oct 2025 Validation"
+    )
+    service = ""
+    if config.get("recipe"):
+        intervals = metrics.get("intervals") or {}
+        service = f"""
+## Service recipe
+* **Recipe:** `{config["recipe"]}` (profiles recomputed from history at the forecast moment)
+* **Recent window:** `{config.get("recent_days")}` days
+* **Served forecast:** `{metrics.get("selected", "unknown")}` (residual model is used only if it beats the base)
+* **Holdout WAPE, base / base + model:** `{holdout["base_wape"]:.4f}` / `{holdout["model_wape"]:.4f}`
+* **Training history:** `{config.get("training_history_start")}` – `{config.get("training_history_end")}`
+* **Spatial levels:** `{", ".join(config.get("spatial_levels", ["route"]))}`
+* **Prediction interval:** `{intervals.get("method", "none")}`, nominal `{intervals.get("nominal_coverage", 0):.0%}`, \
+measured `{intervals.get("check_coverage", 0):.1%}` on `{" – ".join(intervals.get("check_period", []))}`
+"""
     return f"""# Model Card: Tram Ridership Predictor `{version}`
 
 ## Overview
@@ -157,11 +175,11 @@ def render_model_card(
 * **Residual Learning:** `{config.get("use_residual", True)}`
 * **Per Route Models:** `{config.get("per_route", True)}`
 
-## Performance (Sep-Oct 2025 Validation)
+## Performance ({period})
 * **Overall WAPE:** `{wape:.4f}` ({wape * 100:.2f}%)
 * **Overall WAPE-score:** `{overall.get("wape_score", 0.0):.4f}`
 * **Overall MAE:** `{overall.get("mae", 0.0):.2f}`
-
+{service}
 ## Artifacts
 * `estimator.joblib` (SHA-256: `{manifest["estimator_sha256"]}`)
 """
@@ -175,6 +193,7 @@ def export_model_bundle(
     config: dict[str, Any],
     models_root: Path = Path("models/tram"),
     overwrite: bool = False,
+    features_spec: dict[str, Any] | None = None,
 ) -> Path:
     """Export an immutable versioned model bundle with manifest and checksums."""
     bundle_dir = models_root / version
@@ -197,7 +216,7 @@ def export_model_bundle(
     estimator_hash = sha256_file(estimator_file)
 
     # 2. Features specification
-    features_spec = {
+    features_spec = features_spec or {
         "feature_cols": FEATURE_COLS,
         "categorical_features": CATEGORICAL_FEATURES,
         "base_profile_col": BASE_PROFILE_COL,

@@ -5,6 +5,7 @@ from tram.application.errors import ApplicationError
 from tram.application.mapping import spatial_document, spatial_from_document
 from tram.application.models import BUNDLE_METHOD, SEASONAL_METHOD
 from tram.application.ports import Clock, Predictor, Repository
+from tram.domain.series import SpatialKey, SpatialLevel
 from tram.domain.time import Horizon, Interval, Resolution, parse_time
 
 LOGGER = logging.getLogger(__name__)
@@ -57,6 +58,32 @@ class RunWorker:
             )
         return predictor
 
+    def _route_profile(self, run):
+        """Route-level observation profile of the run's dataset with the same metric and step.
+
+        A model that forecasts route totals needs the route history to forecast stops; the
+        stop history only says how a route total is shared between its stops.
+        """
+        dataset = self.repository.dataset(run["dataset_revision_id"]) or {}
+        profile = run["profile"]
+        for observed in dataset.get("capabilities", {}).get("observation_profiles", []):
+            if (
+                observed.get("spatial_level") == "route"
+                and observed.get("metric") == profile.get("metric")
+                and observed.get("resolution") == profile.get("resolution")
+            ):
+                return observed["id"]
+        return None
+
+    def _groups(self, predictor, series):
+        """Series predicted in one call: all series of a route for joint predictors."""
+        if not getattr(predictor, "joint_route_series", False):
+            return [[item] for item in series]
+        groups = {}
+        for item in series:
+            groups.setdefault(item["spatial"]["route_id"], []).append(item)
+        return list(groups.values())
+
     def execute_one(self) -> bool:
         claim = self.repository.claim(self.clock.now(), self.lease_seconds, self.max_attempts)
         if not claim:
@@ -71,20 +98,41 @@ class RunWorker:
             if not series:
                 raise ApplicationError("INSUFFICIENT_HISTORY", "No series available")
             points = []
-            for item in series:
+            as_of = parse_time(run["as_of"])
+            route_profile = None
+            if getattr(predictor, "joint_route_series", False) and profile.get(
+                "spatial_level"
+            ) not in (None, "route"):
+                route_profile = self._route_profile(run)
+            for group in self._groups(predictor, series):
                 if not self.repository.heartbeat(
                     run["id"], token, self.clock.now(), self.lease_seconds
                 ):
                     return True  # Lease lost: a different worker owns this run.
-                spatial = spatial_from_document(item["spatial"])
-                as_of = parse_time(run["as_of"])
-                history = self.repository.history(
-                    run["dataset_revision_id"], profile["observation_profile_id"], spatial, as_of
-                )
+                spatials = tuple(spatial_from_document(item["spatial"]) for item in group)
+                history = []
+                for spatial in spatials:
+                    history.extend(
+                        self.repository.history(
+                            run["dataset_revision_id"],
+                            profile["observation_profile_id"],
+                            spatial,
+                            as_of,
+                        )
+                    )
+                if route_profile:
+                    history.extend(
+                        self.repository.history(
+                            run["dataset_revision_id"],
+                            route_profile,
+                            SpatialKey(SpatialLevel.ROUTE, spatials[0].route_id),
+                            as_of,
+                        )
+                    )
                 try:
                     predictions = predictor.predict(
-                        history,
-                        (spatial,),
+                        tuple(history),
+                        spatials,
                         Interval(
                             parse_time(run["forecast_start"]), parse_time(run["forecast_end"])
                         ),
@@ -116,7 +164,7 @@ class RunWorker:
                             "value": prediction.value,
                             "missing_reason": prediction.missing_reason,
                             "value_kind": "forecast",
-                            "prediction_interval": None,
+                            "prediction_interval": prediction.prediction_interval,
                             "quality": {
                                 "status": "missing" if prediction.value is None else "ok",
                                 "coverage_ratio": 0 if prediction.value is None else 1,
