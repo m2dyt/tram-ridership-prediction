@@ -44,7 +44,7 @@ class ArtifactPredictor:
         # One method name for every bundle; the version is pinned separately in the run.
         self.method = BUNDLE_METHOD
         self.version = bundle.version
-        config = bundle.config or {}
+        config = getattr(bundle, "config", None) or {}
         self.adaptive = config.get("recipe") == adaptive.RECIPE
         # The worker passes every series of a route in one call (and the route history for
         # stop forecasts), because stop values are shares of the route forecast.
