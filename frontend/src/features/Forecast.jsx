@@ -438,6 +438,17 @@ function Result({ run, route }) {
               onSelect={setIndex}
               unit={unitName(run.profile.metric)}
             />
+            {points.some((p) => p.prediction_interval) && (
+              <p className="muted">
+                Полоса на графике: диапазон, в который фактическое значение
+                попадало примерно в{" "}
+                {Math.round(
+                  (points.find((p) => p.prediction_interval)
+                    ?.prediction_interval.nominal_coverage || 0) * 100,
+                )}{" "}
+                % часов на отложенной проверке модели.
+              </p>
+            )}
             <p className="muted">
               Карта: выбранный маршрут и интервал. График: один пространственный
               ряд. Расчёт {run.id.slice(0, 8)} · данные на {date(run.as_of)}.

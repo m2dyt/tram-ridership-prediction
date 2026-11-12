@@ -109,11 +109,15 @@ class FileModelCatalog:
             type(route) is int or (isinstance(route, str) and route) for route in routes
         ):
             return _invalid(version, "config.json routes must be a list of route numbers")
+        levels = config.get("spatial_levels", ["route"])
+        if not isinstance(levels, list) or not set(levels) <= {"route", "stop"} or not levels:
+            return _invalid(version, "config.json spatial_levels must list route and/or stop")
         return {
             "status": "ok",
             "version": version,
             "reason": None,
             "routes": [str(route) for route in routes],
+            "spatial_levels": levels,
             "model_type": model_type,
             "model": {
                 "id": version,

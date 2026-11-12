@@ -23,7 +23,9 @@ STOP_FORECAST_ID = "competition-forecast-stop-day"
 # Seasonal naive needs the latest same weekday; two weeks keep the bundle small.
 STOP_HISTORY_DAYS = 14
 # Part of the revision hashes: a changed bundle layout must never reuse an old revision id.
-BUNDLE_FORMAT = "route-hour+stop-hour+line-ids-v3"
+BUNDLE_FORMAT = "route-hour+stop-hour+line-ids+week-ahead-v4"
+# A day forecast may start on any of the first FORECAST_DAYS days after the labels end.
+FORECAST_DAYS = 7
 
 
 def file_digest(paths: list[Path]) -> str:
@@ -278,12 +280,15 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                     "allowed_as_of_start": as_of_start.isoformat(),
                     "allowed_as_of_end": history_end.isoformat(),
                     "forecast_start_min": history_end.isoformat(),
-                    "forecast_start_max": history_end.isoformat(),
+                    "forecast_start_max": (
+                        history_end + timedelta(days=FORECAST_DAYS - 1)
+                    ).isoformat(),
                     "start_alignment": "local_midnight",
                     "evaluation_status": "pending",
                     "prediction_interval_available": False,
                     "limitations": [
-                        "Для API доступен почасовой прогноз на одни сутки.",
+                        "Прогноз почасовой на одни сутки; сутки можно выбрать в пределах недели "
+                        "после конца данных.",
                         "Прогноз на ноябрь и декабрь для конкурсной отправки строится отдельной командой обучения.",
                     ],
                 },
@@ -302,13 +307,15 @@ def build_bundle(data_dir: Path, output_dir: Path, project_root: Path) -> tuple[
                     "allowed_as_of_start": (stop_history_start + timedelta(days=7)).isoformat(),
                     "allowed_as_of_end": history_end.isoformat(),
                     "forecast_start_min": history_end.isoformat(),
-                    "forecast_start_max": history_end.isoformat(),
+                    "forecast_start_max": (
+                        history_end + timedelta(days=FORECAST_DAYS - 1)
+                    ).isoformat(),
                     "start_alignment": "local_midnight",
                     "evaluation_status": "pending",
                     "prediction_interval_available": False,
                     "limitations": [
-                        "Почасовой прогноз на сутки по остановкам — сезонная база на оценённом "
-                        "распределении; обученная модель маршрута здесь не применяется.",
+                        "Почасовой прогноз на сутки по остановкам: прогноз маршрута, разделённый "
+                        "по оценённым долям остановок; без обученной модели сезонная база.",
                         *stop_limitations,
                     ],
                 },

@@ -21,16 +21,28 @@ def register(parsers):
         "--metric", choices=["occupancy", "occupancy_ratio"], default="occupancy"
     )
     evaluate = parsers.add_parser(
-        "evaluate", help="Backtest seasonal baseline without training; publish a report"
+        "evaluate",
+        help="Backtest the seasonal baseline, or a trained model bundle next to it; publish a report",
     )
     evaluate.add_argument("--dataset", required=True)
     evaluate.add_argument("--profile", required=True)
+    evaluate.add_argument(
+        "--model-version",
+        help="Model bundle to check (for example <version>-check); folds must start after its "
+        "training history",
+    )
     evaluate.add_argument(
         "--origin",
         action="append",
         required=True,
         help="RFC3339 fold start; repeat in increasing order",
     )
+    prune = parsers.add_parser(
+        "prune-runs",
+        help="Delete finished forecast runs older than N days with their points and retry keys",
+    )
+    prune.add_argument("--keep-days", type=int, required=True, help="Keep runs of the last N days")
+    prune.add_argument("--dry-run", action="store_true", help="Only count the runs to delete")
     prepare = parsers.add_parser("prepare-csv", help="Convert aggregate CSV into a prepared bundle")
     prepare.add_argument("manifest", type=Path)
     prepare.add_argument("csv", type=Path)
@@ -111,6 +123,16 @@ def execute(args):
             )
             print(f"Exported estimates to {args.directory}; run publish after review")
             return 0
+        if args.command == "prune-runs":
+            from datetime import timedelta
+
+            if args.keep_days < 1:
+                raise ValueError("--keep-days must be at least 1")
+            cutoff = clock.now() - timedelta(days=args.keep_days)
+            count = reads.repository.prune_runs(cutoff, dry_run=args.dry_run)
+            verb = "Would delete" if args.dry_run else "Deleted"
+            print(f"{verb} {count} finished runs that finished before {cutoff.isoformat()}")
+            return 0
         if args.command == "evaluate":
             from tram_ml.baseline import SeasonalNaive
             from tram_ml.evaluation import score, temporal_folds
@@ -118,6 +140,18 @@ def execute(args):
             from tram.application.evaluation import EvaluateBaseline
             from tram.infrastructure.evaluation import SqlEvaluationStore
 
+            model = model_doc = None
+            if args.model_version:
+                from tram.infrastructure.ml.artifact_predictor import ArtifactPredictor
+                from tram.infrastructure.ml.model_catalog import FileModelCatalog
+
+                described = FileModelCatalog(
+                    settings.models_root, configured_version=args.model_version
+                ).active_bundle()
+                if described["status"] != "ok":
+                    raise SystemExit(f"Model bundle is not usable: {described['reason']}")
+                model = ArtifactPredictor.from_version(settings.models_root, args.model_version)
+                model_doc = described["model"]
             runner = EvaluateBaseline(
                 reads.repository,
                 SqlEvaluationStore(sessions, contract),
@@ -126,6 +160,8 @@ def execute(args):
                 SeasonalNaive(),
                 temporal_folds,
                 score,
+                model=model,
+                model_doc=model_doc,
             )
             report = runner.execute(args.dataset, args.profile, args.origin)
             print(

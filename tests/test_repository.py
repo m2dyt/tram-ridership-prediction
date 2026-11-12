@@ -95,6 +95,32 @@ class RepositoryTests(unittest.TestCase):
         )
         self.assertEqual(graph["items"][0], map_result["features"][0]["properties"])
 
+    def test_prune_runs_deletes_only_old_finished_runs_with_their_rows(self):
+        old, _ = self.forecasts.create(self.command, "operator", "test-key-old")
+        self.assertTrue(RunWorker(self.repo, self.clock, SeasonalNaive()).execute_one())
+        queued, _ = self.forecasts.create(
+            {
+                **self.command,
+                "forecast_start": "2026-09-21T00:00:00+03:00",
+                "as_of": "2026-09-20T12:00:00+03:00",
+            },
+            "operator",
+            "test-key-queued",
+        )
+        later = NOW + timedelta(days=40)
+        self.assertEqual(self.repo.prune_runs(later, dry_run=True), 1)
+        self.assertEqual(self.repo.prune_runs(NOW - timedelta(days=1)), 0)
+        self.assertEqual(self.repo.prune_runs(later), 1)
+        self.assertIsNone(self.repo.run(old["id"]))
+        self.assertEqual(self.repo.run(queued["id"])["status"], "queued")
+        with self.sessions() as session:
+            left = session.query(ForecastPointRow).filter_by(run_id=old["id"]).count()
+        self.assertEqual(left, 0)
+        # The retry key of the deleted run is gone: the same key creates a new run.
+        again, created = self.forecasts.create(self.command, "operator", "test-key-old")
+        self.assertTrue(created)
+        self.assertNotEqual(again["id"], old["id"])
+
     def test_expired_worker_cannot_publish_or_extend_lease(self):
         run, _ = self.forecasts.create(self.command, "operator", "test-key-1")
         first = self.repo.claim(NOW, 30, 3)

@@ -159,3 +159,16 @@ test("coverage displays loading and error states without a misleading zero", () 
     "1 / 2",
   );
 });
+
+test("reports of a trained model are explained in Russian", () => {
+  assert.equal(
+    explainForecastText(
+      "Trained model svc-check checked on folds after its training history; the seasonal baseline is shown on the same intervals",
+    ),
+    "Проверена обученная модель svc-check на днях после конца её обучающей истории; сезонная база показана на тех же часах.",
+  );
+  assert.match(
+    explainForecastText("Both methods are scored on the same intervals only"),
+    /одних и тех же часах/u,
+  );
+});

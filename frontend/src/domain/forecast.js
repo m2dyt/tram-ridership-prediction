@@ -63,6 +63,8 @@ const FORECAST_MESSAGES = {
     "Прогнозы пересекающихся периодов проверки учитываются отдельно.",
   "External context is not used by seasonal baseline":
     "Сезонный базовый метод не использует внешние данные.",
+  "Both methods are scored on the same intervals only":
+    "Обе модели оцениваются только на одних и тех же часах.",
 };
 
 export function explainForecastText(value) {
@@ -71,8 +73,14 @@ export function explainForecastText(value) {
     /^Model bundle (.+) is a seasonal-profile baseline; no model was fitted$/.exec(
       value,
     );
-  return seasonalBundle
-    ? `Пакет модели ${seasonalBundle[1]} использует сезонный базовый метод; обучение не проводилось.`
+  if (seasonalBundle)
+    return `Пакет модели ${seasonalBundle[1]} использует сезонный базовый метод; обучение не проводилось.`;
+  const checked =
+    /^Trained model (.+) checked on folds after its training history; the seasonal baseline is shown on the same intervals$/.exec(
+      value,
+    );
+  return checked
+    ? `Проверена обученная модель ${checked[1]} на днях после конца её обучающей истории; сезонная база показана на тех же часах.`
     : value;
 }
 

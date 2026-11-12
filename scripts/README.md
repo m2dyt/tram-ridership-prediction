@@ -23,6 +23,8 @@
 | [extract_stops.js](extract_stops.js) | Node.js утилита извлечения остановок из исходных GeoJSON и CSV-справочников. |
 | [fetch_mosru_data.js](fetch_mosru_data.js) | Скрипт выгрузки справочников транспорта и остановок с портала открытых данных Москвы. |
 | [fetch_route_geom.js](fetch_route_geom.js) | Скрипт получения геометрии маршрутов общественного транспорта. |
+| [evaluate_check_model.py](evaluate_check_model.py) | Отчёт о точности версии `<version>-check` рабочей модели: прогноз на сутки вперёд для каждого дня отложенных недель рядом с сезонной базой, экран «Качество». |
+| [fetch_production_calendar.py](fetch_production_calendar.py) | Загрузка официального производственного календаря РФ (isdayoff.ru) в `ml/training/tram/production_calendar_ru.csv`; запускать, когда выйдет постановление на следующий год. |
 | [fetch_weather_2025.py](fetch_weather_2025.py) | Выгрузка фактической почасовой погоды Москвы за 2025 год через Open-Meteo Archive API в `data/weather_hourly_2025.csv`. |
 | [generate_calendar_2025.py](generate_calendar_2025.py) | Генерация производственного календаря РФ за 2025 год (постановление Правительства № 1335) в `data/calendar_2025.csv`. |
 | [check_docs.py](check_docs.py) | Проверка локальных Markdown-ссылок и наличия назначения каждого файла в README своей папки. |
@@ -30,7 +32,7 @@
 | [prepare_tram_challenge.py](prepare_tram_challenge.py) | Аудит, проверка схемы, расчёт SHA-256 хешей конкурсных датасетов и генерация provenance.json и manifest.json. |
 | [build_competition_bundle.py](build_competition_bundle.py) | Подготовка почасовых наблюдений и сети маршрутов для импорта в PostgreSQL. |
 | [import-dataset.sh](import-dataset.sh) | Генерация API-бандла и публикация ревизии конкурсных меток в базу данных. |
-| [train-model.sh](train-model.sh) | Обучение CPU-модели по меткам и запись версионированного бандла в том Docker. |
+| [train-model.sh](train-model.sh) | Обучение рабочей модели сервиса (`ml.training.tram.service`) по меткам, запись версий `<version>` и `<version>-check` в том Docker и отчёт о точности проверочной версии. |
 | [bootstrap-operator.py](bootstrap-operator.py) | Создание локального оператора на пустой базе данных с паролем по умолчанию. |
 | [start-stack.sh](start-stack.sh) | Полная сборка, миграции, импорт, обучение, запуск сервисов и проверка счетчиков PostgreSQL. |
 | [download_sources.py](download_sources.py) | Скачивание открытых API (погода, события) и импорт выгрузок data.mos.ru. |

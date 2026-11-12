@@ -37,15 +37,19 @@ export function useMapDemand(plan, user) {
     staleTime: 30000,
     retry: false,
     // Просмотр карты только ищет готовые расчёты и ничего не ставит в очередь.
-    queryFn: async () => {
-      const runs = await fetchPages(fetchJson, "/forecast-runs", {
-        dataset_revision_id: plan[0].dataset_revision_id,
-      });
-      return plan.map((request) => ({
-        request,
-        run: findDemandRun(runs, request),
-      }));
-    },
+    // Сервер отбирает расчёты по профилю и дате начала, поэтому список не растёт
+    // вместе с базой.
+    queryFn: async () =>
+      Promise.all(
+        plan.map(async (request) => {
+          const runs = await fetchPages(fetchJson, "/forecast-runs", {
+            dataset_revision_id: request.dataset_revision_id,
+            profile_id: request.profile_id,
+            forecast_start: request.forecast_start,
+          });
+          return { request, run: findDemandRun(runs, request) };
+        }),
+      ),
   });
 
   // Недостающие расчёты оператор запускает сам кнопкой. Ключ повтора зависит

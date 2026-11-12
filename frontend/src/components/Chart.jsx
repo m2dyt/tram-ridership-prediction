@@ -11,8 +11,16 @@ export default function Chart({
   fieldLabels = {},
 }) {
   if (!points.length) return <Empty />;
+  // Диапазон прогноза рисуется полосой, если сервер его прислал.
+  const banded = points
+    .map((p, i) => [i, p.prediction_interval])
+    .filter(([, band]) => band);
   const max =
-    Math.max(1, ...points.flatMap((p) => fields.map((f) => p[f] ?? 0))) * 1.15;
+    Math.max(
+      1,
+      ...points.flatMap((p) => fields.map((f) => p[f] ?? 0)),
+      ...banded.map(([, band]) => band.upper),
+    ) * 1.15;
   const x = (i) => 48 + (i / Math.max(1, points.length - 1)) * 870;
   const y = (v) => 180 - (v / max) * 150;
   const colors = ["#128a85", "#df8f48"];
@@ -38,6 +46,21 @@ export default function Chart({
             </text>
           </g>
         ))}
+        {banded.length > 1 && (
+          <polygon
+            className="chart-band"
+            points={[
+              ...banded.map(([i, band]) => `${x(i)},${y(band.upper)}`),
+              ...banded
+                .slice()
+                .reverse()
+                .map(([i, band]) => `${x(i)},${y(band.lower)}`),
+            ].join(" ")}
+            fill="#128a85"
+            fillOpacity="0.14"
+            stroke="none"
+          />
+        )}
         {fields.map((field, j) =>
           chartSegments(points, field).map((segment, i) => (
             <g key={`${field}-${i}`}>

@@ -7,8 +7,10 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from ml.training.tram import adaptive
 from ml.training.tram.bundle import (
     TramModelBundle,
     get_active_version,
@@ -16,7 +18,7 @@ from ml.training.tram.bundle import (
 )
 from tram.application.models import BUNDLE_METHOD
 from tram.application.ports import Predictor
-from tram.domain.series import Observation, Prediction, SpatialKey
+from tram.domain.series import Observation, Prediction, SpatialKey, SpatialLevel
 from tram.domain.time import (
     MOSCOW,
     Horizon,
@@ -42,6 +44,18 @@ class ArtifactPredictor:
         # One method name for every bundle; the version is pinned separately in the run.
         self.method = BUNDLE_METHOD
         self.version = bundle.version
+        config = getattr(bundle, "config", None) or {}
+        self.adaptive = config.get("recipe") == adaptive.RECIPE
+        # The worker passes every series of a route in one call (and the route history for
+        # stop forecasts), because stop values are shares of the route forecast.
+        self.joint_route_series = self.adaptive
+        if config.get("use_weather"):
+            # At serving time only a weather forecast would be known; the service has no such
+            # source, and filling in average weather silently would bias the model.
+            raise ValueError(
+                f"Model bundle {bundle.version} uses weather features, but the service has no "
+                "weather forecast source"
+            )
 
     @classmethod
     def from_version(cls, models_root: Path, version: str) -> ArtifactPredictor:
@@ -86,6 +100,8 @@ class ArtifactPredictor:
         resolution: Resolution,
         as_of: datetime,
     ) -> tuple[Prediction, ...]:
+        if self.adaptive:
+            return self._predict_adaptive(history, series, window, resolution, as_of)
         # ArtifactPredictor specializes in hourly route forecasts
         if resolution != Resolution.HOUR:
             if self.fallback:
@@ -144,3 +160,103 @@ class ArtifactPredictor:
             )
 
         return tuple(predictions)
+
+    def _predict_adaptive(self, history, series, window, resolution, as_of):
+        """Route forecast from fresh profiles; stop forecasts are shares of it."""
+        if resolution != Resolution.HOUR:
+            raise ValueError(f"Model bundle forecasts hourly values, got {resolution}")
+        hours = list(intervals(window, resolution))
+        if not hours or not series:
+            return ()
+        route_ids = {key.route_id for key in series}
+        if len(route_ids) != 1:
+            raise ValueError("Series of one call must belong to one route")
+        route_id = next(iter(route_ids))
+        observations = tuple(history)
+        route_rows = _rows(o for o in observations if o.spatial.level == SpatialLevel.ROUTE)
+        stop_obs = [o for o in observations if o.spatial.level == SpatialLevel.STOP]
+        if route_rows.empty and stop_obs:
+            # No route-level profile in the dataset: the stops of a route add up to it.
+            route_rows = (
+                _rows(stop_obs).groupby(["date", "hour"], as_index=False)["boardings"].sum()
+            )
+        route_rows = route_rows.assign(route=_route_number(route_id))
+        target = pd.DataFrame(
+            {
+                "route": _route_number(route_id),
+                "date": [h.start.astimezone(MOSCOW).strftime("%Y-%m-%d") for h in hours],
+                "hour": [h.start.astimezone(MOSCOW).hour for h in hours],
+            }
+        )
+        values, lower, upper = adaptive.forecast(self.bundle.models, route_rows, target)
+        # Route totals are whole passengers, like the earlier model; the range is rounded
+        # outwards so it still contains the value. Stop values stay fractional shares.
+        values = np.round(values)
+        if lower is not None:
+            lower, upper = np.floor(np.minimum(lower, values)), np.ceil(np.maximum(upper, values))
+        shares = _stop_shares(series, stop_obs, self.bundle.models.get("recent_days", 28))
+        band_info = self.bundle.models.get("intervals") or {}
+        reference = aware(as_of)
+        predictions = []
+        for key in series:
+            share = shares.get(key.canonical, 1.0)
+            for index, interval in enumerate(hours):
+                value = values[index]
+                if not np.isfinite(value):
+                    predictions.append(
+                        Prediction(key, interval, None, "insufficient_history", reference)
+                    )
+                    continue
+                band = None
+                if lower is not None:
+                    band = {
+                        "lower": float(lower[index] * share),
+                        "upper": float(upper[index] * share),
+                        "nominal_coverage": float(band_info["nominal_coverage"]),
+                        "method": band_info["method"],
+                    }
+                predictions.append(
+                    Prediction(key, interval, float(value * share), None, reference, band)
+                )
+        return tuple(predictions)
+
+
+def _route_number(route_id: str):
+    try:
+        return int(route_id)
+    except ValueError:
+        return route_id
+
+
+def _rows(observations) -> pd.DataFrame:
+    """Observations as route/date/hour rows in Moscow time; a missing value is zero boardings."""
+    records = []
+    for observation in observations:
+        start = observation.interval.start.astimezone(MOSCOW)
+        records.append(
+            {
+                "date": start.strftime("%Y-%m-%d"),
+                "hour": start.hour,
+                "boardings": float(observation.value or 0.0),
+            }
+        )
+    return pd.DataFrame(records, columns=["date", "hour", "boardings"])
+
+
+def _stop_shares(series, stop_obs, recent_days):
+    """Share of each stop in the route total over the recent window of the stop history."""
+    stops = [key for key in series if key.level == SpatialLevel.STOP]
+    if not stops:
+        return {}
+    if not stop_obs:
+        return {key.canonical: 1.0 / len(stops) for key in stops}
+    last = max(o.interval.start for o in stop_obs)
+    totals = {key.canonical: 0.0 for key in stops}
+    for observation in stop_obs:
+        age = (last - observation.interval.start).total_seconds() / 86400
+        if observation.spatial.canonical in totals and age < recent_days:
+            totals[observation.spatial.canonical] += float(observation.value or 0.0)
+    whole = sum(totals.values())
+    if whole <= 0:
+        return {key: 1.0 / len(stops) for key in totals}
+    return {key: total / whole for key, total in totals.items()}

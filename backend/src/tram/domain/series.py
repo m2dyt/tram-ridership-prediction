@@ -101,6 +101,8 @@ class Prediction:
     value: float | None
     missing_reason: str | None
     reference_start: datetime | None
+    # Optional calibrated range: {"lower", "upper", "nominal_coverage", "method"}.
+    prediction_interval: dict | None = None
 
     def __post_init__(self) -> None:
         if self.value is not None:
@@ -109,3 +111,13 @@ class Prediction:
             raise DomainError(
                 "Missing predictions must have a reason; nonmissing predictions must not"
             )
+        band = self.prediction_interval
+        if band is not None:
+            if self.value is None:
+                raise DomainError("A missing prediction cannot have an interval")
+            if not 0 <= band["lower"] <= self.value <= band["upper"]:
+                raise DomainError(
+                    "Prediction interval must contain the value: lower <= value <= upper"
+                )
+            if not 0 < band["nominal_coverage"] < 1 or not band.get("method"):
+                raise DomainError("Prediction interval needs a coverage in (0, 1) and a method")
